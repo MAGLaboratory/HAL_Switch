@@ -13,11 +13,12 @@
 #define PRS_CH_CTRL_SOURCESEL_ACMP_CAPSENSE     PRS_CH_CTRL_SOURCESEL_ACMP0
 #define PRS_CH_CTRL_SIGSEL_ACMPOUT_CAPSENSE     PRS_CH_CTRL_SIGSEL_ACMP0OUT
 
-#define ACMP_CHANNELS           8             /**< Number of channels for the Analog Comparator */
+#define KCS_NUM_CHANNELS        2             /**< Number of channels used by Kirisaki Capsense */
 
 #define BUTTON0_CHANNEL         0             /**< Button 0 channel */
 #define BUTTON1_CHANNEL         1             /**< Button 1 channel */
 
-#define CAPSENSE_CH_IN_USE  { true, true, false, false, false, false, false, false }
+
+#define  KCS_CHANNEL_IDX_2_HW {BUTTON0_CHANNEL, BUTTON1_CHANNEL}
 
 #endif /* HAL_CONFIG_KIRICAPSENSECONFIG_H_ */

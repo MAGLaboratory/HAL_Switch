@@ -170,6 +170,9 @@
 #define led1r_PIN                            (0U)
 #define led1r_PORT                           (gpioPortA)
 
+#define led1g_PIN                            (13U)
+#define led1g_PORT                           (gpioPortE)
+
 #define led0b_PIN                            (11U)
 #define led0b_PORT                           (gpioPortB)
 
@@ -184,9 +187,6 @@
 
 #define txen_PIN                             (15U)
 #define txen_PORT                            (gpioPortC)
-
-#define led1g_PIN                            (13U)
-#define led1g_PORT                           (gpioPortE)
 
 #define prog_PIN                             (2U)
 #define prog_PORT                            (gpioPortF)

@@ -12,6 +12,10 @@
 #include <stdbool.h>
 #include "kiricapsenseconfig.h"
 
-void kiricapsense_init(void);
+void KIRICAPSENSE_Init(void);
+
+void KIRICAPSENSE_IT (void);
+
+bool KIRICAPSENSE_getPressed(uint8_t channel);
 
 #endif /* KIRICAPSENSE_INC_KIRICAPSENSE_H_ */

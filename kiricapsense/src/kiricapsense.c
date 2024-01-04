@@ -13,69 +13,28 @@
 
 /** The current channel we are sensing. */
 static volatile uint8_t currentChannel;
-/** Flag for measurement completion. */
-static volatile bool measurementComplete;
 
-static const bool channelsInUse[ACMP_CHANNELS] = CAPSENSE_CH_IN_USE;
+static volatile uint32_t channelValues[KCS_NUM_CHANNELS] = { 0 };
 
-static void CAPSENSE_Measure(ACMP_Channel_TypeDef channel)
-{
-  /* Set up this channel in the ACMP. */
-  ACMP_CapsenseChannelSet(KCS_ACMP_CAPSENSE, channel);
-
-  /* Reset timers */
-  TIMER0->CNT = 0;
-  TIMER1->CNT = 0;
-
-  measurementComplete = false;
-
-  /* Start timers */
-  TIMER0->CMD = TIMER_CMD_START;
-  TIMER1->CMD = TIMER_CMD_START;
-
-  /* Wait for measurement to complete */
-  while ( measurementComplete == false ) {
-    EMU_EnterEM1();
-  }
-}
+static volatile uint32_t channelMaxValues[KCS_NUM_CHANNELS] = { 0 };
 
 
-
-void CAPSENSE_Sense(void)
-{
-  /* Use the default STK capacative sensing setup and enable it */
-  ACMP_Enable(KCS_ACMP_CAPSENSE);
-
-#if defined(CAPSENSE_CHANNELS)
-  /* Iterate through only the channels in the channelList */
-  for (currentChannel = 0; currentChannel < ACMP_CHANNELS; currentChannel++) {
-    CAPSENSE_Measure(channelList[currentChannel]);
-  }
-#else
-  /* Iterate through all channels and check which channel is in use */
-  for (currentChannel = 0; currentChannel < ACMP_CHANNELS; currentChannel++) {
-    /* If this channel is not in use, skip to the next one */
-    if (!channelsInUse[currentChannel]) {
-      continue;
-    }
-
-    CAPSENSE_Measure((ACMP_Channel_TypeDef) currentChannel);
-  }
-#endif
-
-  /* Disable ACMP while not sensing to reduce power consumption */
-  ACMP_Disable(KCS_ACMP_CAPSENSE);
-}
-
-
-void CAPSENSE_Init(void)
+void KIRICAPSENSE_Init(void)
 {
   /* Use the default STK capacitive sensing setup */
-  ACMP_CapsenseInit_TypeDef capsenseInit = ACMP_CAPSENSE_INIT_DEFAULT;
+  ACMP_CapsenseInit_TypeDef capsenseInit = {
+    false,            /* fullBias */
+    false,            /* halfBias */
+    0x7,              /* biasProg */
+    acmpWarmTime512,  /* 512 cycle warmup to be safe */
+    acmpHysteresisLevel1,
+    acmpResistor0,
+    false,            /* low power reference */
+    47,             /* VDD level */
+    true              /* Enable after init. */
+  };
 
   /* Enable TIMER0, TIMER1, ACMP_CAPSENSE and PRS clock */
-  CMU_ClockEnable(cmuClock_HFPER, true);
-  CMU_ClockEnable(cmuClock_TIMER0, true);
   CMU_ClockEnable(cmuClock_TIMER1, true);
 #if defined(KCS_ACMP_CAPSENSE_CMUCLOCK)
   CMU_ClockEnable(KCS_ACMP_CAPSENSE_CMUCLOCK, true);
@@ -84,13 +43,7 @@ void CAPSENSE_Init(void)
 #endif
   CMU_ClockEnable(cmuClock_PRS, true);
 
-  /* Initialize TIMER0 - Prescaler 2^9, top value 10, interrupt on overflow */
-  TIMER0->CTRL = TIMER_CTRL_PRESC_DIV512;
-  TIMER0->TOP  = 10;
-  TIMER0->IEN  = TIMER_IEN_OF;
-  TIMER0->CNT  = 0;
-
-  /* Initialize TIMER1 - Prescaler 2^10, clock source CC1, top value 0xFFFF */
+  /* Initialize TIMER1 - Prescaler value does not matter, clock source CC1, top value 0xFFFF */
   TIMER1->CTRL = TIMER_CTRL_PRESC_DIV1024 | TIMER_CTRL_CLKSEL_CC1;
   TIMER1->TOP  = 0xFFFF;
 
@@ -108,7 +61,55 @@ void CAPSENSE_Init(void)
 
   /* Set up ACMP1 in capsense mode */
   ACMP_CapsenseInit(KCS_ACMP_CAPSENSE, &capsenseInit);
+  ACMP_Enable(KCS_ACMP_CAPSENSE);
+  ACMP_CapsenseChannelSet(KCS_ACMP_CAPSENSE, currentChannel);
+}
 
-  /* Enable TIMER0 interrupt */
-  NVIC_EnableIRQ(TIMER0_IRQn);
+
+/* TIMER0 IRQHandler moved somewhere else. */
+
+void KIRICAPSENSE_IT(void)
+{
+	uint16_t count;
+
+	/* Stop TIMER1 */
+	TIMER1->CMD = TIMER_CMD_STOP;
+
+	/* Read out value of TIMER1 */
+	count = TIMER1->CNT;
+	TIMER1->CNT = 0;
+
+	TIMER1->CMD = TIMER_CMD_START;
+
+	/* Store value in channelValues */
+	channelValues[currentChannel] = count;
+
+	/* Update channelMaxValues */
+	if (count > channelMaxValues[currentChannel]) {
+		channelMaxValues[currentChannel] = count;
+	}
+
+	/* Find the next capsense channel */
+	if (++currentChannel >= KCS_NUM_CHANNELS)
+	{
+		currentChannel = 0;
+	}
+
+	/* Set up this channel in the ACMP. */
+	ACMP_CapsenseChannelSet(KCS_ACMP_CAPSENSE, currentChannel);
+}
+
+bool KIRICAPSENSE_getPressed(uint8_t channel)
+{
+  uint32_t treshold;
+  /* Threshold is set to 12.5% below the maximum value */
+  /* This calculation is performed in two steps because channelMaxValues is
+   * volatile. */
+  treshold  = channelMaxValues[channel];
+  treshold -= channelMaxValues[channel] >> 3;
+
+  if (channelValues[channel] < treshold) {
+    return true;
+  }
+  return false;
 }
