@@ -167,8 +167,14 @@
 #endif /* HAL_CONFIG_H */
 
 // $[Custom pin names]
+#define led0r_PIN                            (14U)
+#define led0r_PORT                           (gpioPortB)
+
 #define led1r_PIN                            (0U)
 #define led1r_PORT                           (gpioPortA)
+
+#define led0g_PIN                            (15U)
+#define led0g_PORT                           (gpioPortC)
 
 #define led1g_PIN                            (13U)
 #define led1g_PORT                           (gpioPortE)
@@ -185,11 +191,13 @@
 #define touch1_PIN                           (1U)
 #define touch1_PORT                          (gpioPortC)
 
-#define txen_PIN                             (15U)
+#define txen_PIN                             (14U)
 #define txen_PORT                            (gpioPortC)
 
-#define prog_PIN                             (2U)
-#define prog_PORT                            (gpioPortF)
+#define relay0_PIN                           (12U)
+#define relay0_PORT                          (gpioPortE)
 
+#define relay1_PIN                           (2U)
+#define relay1_PORT                          (gpioPortF)
 // [Custom pin names]$
 
