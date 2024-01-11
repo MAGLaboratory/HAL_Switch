@@ -31,13 +31,10 @@ They are listed in the table below.
 
 | Interface | Description |
 | --------- | ----------- |
-| Capacitive Touch | Senses the capacitance change on touch pads and performs
-an action |
+| Capacitive Touch | Senses the capacitance change on touch pads and performs an action |
 | Relays | Turns the light on. | 
-| RGB LEDs | Consumes part of the creator's purchase of 1000 LEDs that have no
-use at the moment |
-| RS485 | Implements a high-speed half-duplex connection over which modbus
-can be used |
+| RGB LEDs | Consumes part of the creator's purchase of 1000 LEDs that have no use at the moment |
+| RS485 | Implements a high-speed half-duplex connection over which modbus can be used |
 | SWDIO | A programming interface for ARM devices | 
 
 ### Pinout
@@ -53,7 +50,7 @@ can be used |
 | 8 | led0b | PB11 | GPIO |
 | 9 | +3.3VA | AVDD_2 | PWR | 
 | 10 | led1b | PB13 | GPIO | 
-| 11 | X | PB14 | X |
+| 11 | led0r | PB14 | GPIO |
 | 12 | +3.3VA | AVDD_0 | PWR |
 | 13 | RX | PD6 | US1_RX #3 |
 | 14 | TX | PD7 | US1_TX #3 |
@@ -62,7 +59,7 @@ can be used |
 | 17 | TXEN | PC14 | US1_CS #3 |
 | 18 | led0g | PC15 | GPIO |
 | 19 | SWCLK | PF0 | SWCLK |
-| 20 | SWDIO | PF1 | SWCLK |
+| 20 | SWDIO | PF1 | SWDIO |
 | 21 | relay1 | PF2 | TIM2_CC0 #3 |
 | 22 | +3V3 | IOVDD_5 | PWR | 
 | 23 | relay0 | PE12 | TIM2_CC1 #3 | 
