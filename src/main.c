@@ -1,3 +1,4 @@
+#include "em_assert.h"
 #include "em_device.h"
 #include "em_chip.h"
 #include "em_cmu.h"
@@ -5,13 +6,59 @@
 #include "hal-config.h"
 #include "kiricapsense.h"
 
-#define C_HEARTBEAT_TOP (124)
+/*****************************************************************************
+ * Defines here
+ *****************************************************************************/
+#define C_HEARTBEAT_TOP (124u)
+#define C_HB_SHIFT (0)
+#define C_RVEC_RELAY0_HOLDOFF_SHIFT (0)
+#define C_RVEC_RELAY0_HOLDOFF (1u << C_RVEC_RELAY0_HOLDOFF_SHIFT)
+#define C_RVEC_RELAY0_OUTPUT_SHIFT (C_RVEC_RELAY0_HOLDOFF_SHIFT + 1u)
+#define C_RVEC_RELAY0_OUTPUT (1u <<  C_RVEC_RELAY0_OUTPUT_SHIFT)
+#define C_RVEC_RELAY1_HOLDOFF_SHIFT (2u)
+#define C_RVEC_RELAY1_HOLDOFF (1u << C_RVEC_RELAY1_HOLDOFF_SHIFT)
+#define C_RVEC_RELAY1_OUTPUT_SHIFT (C_RVEC_RELAY1_HOLDOFF_SHIFT + 1u)
+#define C_RVEC_RELAY1_OUTPUT (1u << C_RVEC_RELAY1_OUTPUT_SHIFT)
+#define RELAY_NUM2VEC(num, vec) (vec & 1u << ((num << 1u) + 1u))
+/* LED0 is inverted */
+#define LED0R_ON()  (GPIO->P[led0r_PORT].DOUTCLR = 1u << led0r_PIN)
+#define LED0G_ON()  (GPIO->P[led0g_PORT].DOUTCLR = 1u << led0g_PIN)
+#define LED0B_ON()  (GPIO->P[led0b_PORT].DOUTCLR = 1u << led0b_PIN)
+#define LED0R_OFF() (GPIO->P[led0r_PORT].DOUTSET = 1u << led0r_PIN)
+#define LED0G_OFF() (GPIO->P[led0g_PORT].DOUTSET = 1u << led0g_PIN)
+#define LED0B_OFF() (GPIO->P[led0b_PORT].DOUTSET = 1u << led0b_PIN)
+#define LED1R_ON()  (GPIO->P[led1r_PORT].DOUTSET = 1u << led1r_PIN)
+#define LED1G_ON()  (GPIO->P[led1g_PORT].DOUTSET = 1u << led1g_PIN)
+#define LED1B_ON()  (GPIO->P[led1b_PORT].DOUTSET = 1u << led1b_PIN)
+#define LED1R_OFF() (GPIO->P[led1r_PORT].DOUTCLR = 1u << led1r_PIN)
+#define LED1G_OFF() (GPIO->P[led1g_PORT].DOUTCLR = 1u << led1g_PIN)
+#define LED1B_OFF() (GPIO->P[led1b_PORT].DOUTCLR = 1u << led1b_PIN)
 
-volatile uint8_t timer0Flag = 0;
-uint8_t hbscale = 0;
-uint8_t hbcounter = 0;
+#define C_RELAY_ONF_TIME  (200u)
+#define C_RELAY_ONR_TIME  (10000u-C_RELAY_ONF_TIME)
+#define C_RELAY_ONFR_TIME (200u)
 
-// Debounce State Machine
+#define C_RELAY_CCV_FULL    (125u)
+#define C_RELAY_CCV_REDUCED (125u*70u/100u)
+
+/*****************************************************************************
+ *  Type Definitions
+ *****************************************************************************/
+typedef enum
+{
+	eRelaySMOff = 0,
+	eRelaySMOnFull,
+	eRelaySMOnReduced,
+	eRelaySMOnFullReseat
+} RelaySMStateType;
+
+typedef struct
+{
+	uint16_t cas; /*< count at start */
+	RelaySMStateType state;
+} RelaySMOutputType;
+
+/* Debounce State Machine */
 typedef struct
 {
   uint8_t count : 7;
@@ -24,6 +71,9 @@ typedef union
   DSMOutputStorageBitfieldType s;
 } DSMOutputType;
 
+/*****************************************************************************
+ * Functions
+ *****************************************************************************/
 uint8_t DebounceSM(
 	uint8_t input,
 	uint8_t debounceThreshold,
@@ -48,10 +98,88 @@ uint8_t DebounceSM(
     return out->s.output;
 }
 
+void RelaySM(
+	uint8_t relayNum,
+	uint8_t relayVec,
+	uint16_t msCounter,
+	RelaySMOutputType* out
+)
+{
+	EFM_ASSERT(relayNum < 2u);
+	/* Transitions */
+	if (RELAY_NUM2VEC(relayNum, relayVec))
+	{
+		switch (out->state)
+		{
+		case eRelaySMOff:
+			out->state = eRelaySMOnFull;
+			out->cas = msCounter;
+			break;
+		case eRelaySMOnFull:
+			if (msCounter - out->cas >= C_RELAY_ONF_TIME)
+			{
+				out->state = eRelaySMOnReduced;
+				out->cas = msCounter;
+			}
+			break;
+		case eRelaySMOnReduced:
+			if (msCounter - out->cas >= C_RELAY_ONR_TIME)
+			{
+				out->state = eRelaySMOnFullReseat;
+				out->cas = msCounter;
+			}
+			break;
+		case eRelaySMOnFullReseat:
+			if (msCounter - out->cas >= C_RELAY_ONFR_TIME)
+			{
+				out->state = eRelaySMOnReduced;
+				out->cas = msCounter;
+			}
+			break;
+		default:
+			out->state = eRelaySMOff;
+			break;
+		}
+	}
+	else
+	{
+		out->state = eRelaySMOff;
+	}
+
+	/* Output */
+	/* Since there are only two relays and the compare channel is inverted,
+	 * we can calculate the channel number by XORing the 0th bit.
+	 */
+	switch (out->state)
+	{
+	case eRelaySMOff:
+		TIMER2->CC[relayNum ^ 1u].CCVB = 0;
+		break;
+	case eRelaySMOnFullReseat:
+	case eRelaySMOnFull:
+		TIMER2->CC[relayNum ^ 1u].CCVB = C_RELAY_CCV_FULL;
+		break;
+	case eRelaySMOnReduced:
+		TIMER2->CC[relayNum ^ 1u].CCVB = C_RELAY_CCV_REDUCED;
+		break;
+	}
+}
+
+/*****************************************************************************
+ * Variables
+ *****************************************************************************/
+volatile uint16_t msCounter = 0;
+uint16_t lastCounter = 0;
+uint8_t hbscale = 0;
+uint8_t hbcounter = 0;
+
 DSMOutputType KCS_CH0_Debounce;
 DSMOutputType KCS_CH1_Debounce;
 
 uint8_t relayVec = 0;
+
+RelaySMOutputType KCS_Relay0;
+RelaySMOutputType KCS_Relay1;
 
 int main(void)
 {
@@ -80,7 +208,7 @@ int main(void)
   /* Relays */
   GPIO_PinModeSet(relay0_PORT, relay0_PIN, gpioModePushPullDrive, 0);
   GPIO_PinModeSet(relay1_PORT, relay1_PIN, gpioModePushPullDrive, 0);
-  GPIO_DriveModeSet(relay1_PORT, gpioDriveModeHigh); /* GPIO F */
+  GPIO_DriveModeSet(relay1_PORT, gpioDriveModeStandard); /* GPIO F */
 
   /* GPIO D is handled by the redirect IO at the moment */
 
@@ -93,7 +221,7 @@ int main(void)
   /* Prescaler is div16 */
   /* 875 counts, but minus one from the fundamental counting principal */
   TIMER0->CTRL = TIMER_CTRL_PRESC_DIV16;
-  TIMER0->TOP  = 874;
+  TIMER0->TOP  = 874u;
   TIMER0->IEN  = TIMER_IEN_OF;
   TIMER0->CNT  = 0;
 
@@ -102,6 +230,21 @@ int main(void)
   /* Enable TIMER0 interrupt */
   NVIC_EnableIRQ(TIMER0_IRQn);
 
+  CMU_ClockEnable(cmuClock_TIMER2, true);
+
+  /* Initialize Timer2 */
+  TIMER2->CTRL = TIMER_CTRL_PRESC_DIV4 | TIMER_CTRL_DEBUGRUN ;
+  TIMER2->TOP  = 124u;
+  TIMER2->CNT  = 0;
+  TIMER2->CC[0].CCV = 0;
+  TIMER2->CC[0].CCVB = 0;
+  TIMER2->CC[0].CTRL = TIMER_CC_CTRL_CMOA_CLEAR | TIMER_CC_CTRL_MODE_PWM;
+  TIMER2->CC[1].CCV = 0;
+  TIMER2->CC[1].CCVB = 0;
+  TIMER2->CC[1].CTRL = TIMER_CC_CTRL_CMOA_CLEAR | TIMER_CC_CTRL_MODE_PWM;
+  /* Enable Peripheral Routing for Relay PWM */
+  TIMER2->ROUTE = TIMER_ROUTE_LOCATION_LOC3 | TIMER_ROUTE_CC0PEN | TIMER_ROUTE_CC1PEN;
+
   /* Start Timer0 */
   TIMER0->CMD = TIMER_CMD_START;
 
@@ -109,11 +252,14 @@ int main(void)
   /* TODO: should be in kirisaki capsense */
   TIMER1->CMD = TIMER_CMD_START;
 
+  /* Start Timer2 */
+  TIMER2->CMD = TIMER_CMD_START;
+
   /* Infinite loop */
   while (1) {
-	  if (timer0Flag)
+	  if (msCounter - lastCounter >= 1u)
 	  {
-		  timer0Flag = 0;
+		  lastCounter++;
 
 		  if (++hbscale > C_HEARTBEAT_TOP)
 		  {
@@ -121,69 +267,75 @@ int main(void)
 			  hbcounter++;
 		  }
 
-		  if ((hbcounter & (1 << 2)) && (hbcounter & (1 << 0)))
+		  if ((hbcounter & (1u << (C_HB_SHIFT + 2u))) && (hbcounter & (1u << C_HB_SHIFT)))
 		  {
-			  GPIO->P[led1g_PORT].DOUTSET = 1 << led1g_PIN;
-			  GPIO->P[led0g_PORT].DOUTCLR = 1 << led0g_PIN;
+			  LED0G_ON();
+			  LED1G_ON();
 		  }
 		  else
 		  {
-			  GPIO->P[led1g_PORT].DOUTCLR = 1 << led1g_PIN;
-			  GPIO->P[led0g_PORT].DOUTSET = 1 << led0g_PIN;
+			  LED0G_OFF();
+			  LED1G_OFF();
 		  }
 
-		  if (DebounceSM(KIRICAPSENSE_getPressed(1), 127, &KCS_CH1_Debounce))
+		  for (uint8_t touchRdy = KIRICAPSENSE_pressReady(); touchRdy != 255; touchRdy = KIRICAPSENSE_pressReady())
 		  {
-			  if ((relayVec & 1 << 2) == 0)
+			  if (touchRdy == 0u)
 			  {
-				  relayVec |= 1 << 2;
-				  relayVec ^= 1 << 3;
+				  if (DebounceSM(KIRICAPSENSE_getPressed(touchRdy), 1u, &KCS_CH0_Debounce))
+				  {
+					  if ((relayVec & C_RVEC_RELAY0_HOLDOFF) == 0)
+					  {
+						  relayVec |= C_RVEC_RELAY0_HOLDOFF; /*< Enter holdoff state on rising edge */
+						  relayVec ^= C_RVEC_RELAY0_OUTPUT;  /*< Toggle output */
+					  }
+					  LED0B_ON();
+				  }
+				  else
+				  {
+					  relayVec &= ~(C_RVEC_RELAY0_HOLDOFF); /* Exit holdoff state on falling edge */
+					  LED0B_OFF();
+				  }
 			  }
-			  GPIO->P[led1b_PORT].DOUTSET = 1 << led1b_PIN;
-		  }
-		  else
-		  {
-			  relayVec &= ~(1 << 2);
-			  GPIO->P[led1b_PORT].DOUTCLR = 1 << led1b_PIN;
-		  }
-
-		  if (relayVec & 1 << 3)
-		  {
-			  GPIO->P[led1r_PORT].DOUTSET = 1 << led1r_PIN;
-			  GPIO->P[relay1_PORT].DOUTSET = 1 << relay1_PIN;
-		  }
-		  else
-		  {
-			  GPIO->P[led1r_PORT].DOUTCLR = 1 << led1r_PIN;
-			  GPIO->P[relay1_PORT].DOUTCLR = 1 << relay1_PIN;
-		  }
-
-		  /* LED 0 is inverted */
-		  if (DebounceSM(KIRICAPSENSE_getPressed(0), 127, &KCS_CH0_Debounce))
-		  {
-			  if ((relayVec & 1 << 0) == 0)
+			  else if (touchRdy == 1u)
 			  {
-				  relayVec |= 1 << 0;
-				  relayVec ^= 1 << 1;
+				  if (DebounceSM(KIRICAPSENSE_getPressed(touchRdy), 1u, &KCS_CH1_Debounce))
+				  {
+					  if ((relayVec & C_RVEC_RELAY1_HOLDOFF) == 0)
+					  {
+						  relayVec |= C_RVEC_RELAY1_HOLDOFF; /*< Enter holdoff state on rising edge*/
+						  relayVec ^= C_RVEC_RELAY1_OUTPUT;  /*< Toggle output */
+					  }
+					  LED1B_ON();
+				  }
+				  else
+				  {
+					  relayVec &= ~(C_RVEC_RELAY1_HOLDOFF); /*< Exit holdoff state on falling edge */
+					  LED1B_OFF();
+				  }
 			  }
-			  GPIO->P[led0b_PORT].DOUTCLR = 1 << led0b_PIN;
-		  }
-		  else
-		  {
-			  relayVec &= ~(1 << 0);
-			  GPIO->P[led0b_PORT].DOUTSET = 1 << led0b_PIN;
 		  }
 
-		  if (relayVec & 1 << 1)
+		  if (relayVec & C_RVEC_RELAY1_OUTPUT)
 		  {
-			  GPIO->P[led0r_PORT].DOUTCLR = 1 << led0r_PIN;
-			  GPIO->P[relay0_PORT].DOUTSET = 1 << relay0_PIN;
+			  LED1R_ON();
 		  }
 		  else
 		  {
-			  GPIO->P[led0r_PORT].DOUTSET = 1 << led0r_PIN;
-			  GPIO->P[relay0_PORT].DOUTCLR = 1 << relay0_PIN;
+			  LED1R_OFF();
 		  }
+
+		  if (relayVec & C_RVEC_RELAY0_OUTPUT)
+		  {
+			  LED0R_ON();
+		  }
+		  else
+		  {
+			  LED0R_OFF();
+		  }
+
+		  RelaySM(0, relayVec, msCounter, &KCS_Relay0);
+		  RelaySM(1, relayVec, msCounter, &KCS_Relay1);
 	  }
   }
 }

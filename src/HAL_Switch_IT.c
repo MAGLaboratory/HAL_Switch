@@ -12,7 +12,7 @@
 #include "kiricapsense.h"
 #include "hal-config.h"
 
-extern volatile uint8_t timer0Flag;
+extern volatile uint16_t msCounter;
 volatile uint32_t msTicks = 0;
 
 void TIMER0_IRQHandler(void)
@@ -20,7 +20,7 @@ void TIMER0_IRQHandler(void)
   /* Clear interrupt flag */
   TIMER0->IFC = TIMER_IFC_OF;
 
-  timer0Flag = 1;
+  msCounter++;
 
   KIRICAPSENSE_IT();
 }

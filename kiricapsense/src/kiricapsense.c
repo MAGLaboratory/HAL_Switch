@@ -14,14 +14,174 @@
 /** The current channel we are sensing. */
 static volatile uint8_t currentChannel;
 
-static volatile uint32_t channelValues[KCS_NUM_CHANNELS] = { 0 };
+static volatile uint16_t channelValues[KCS_NUM_CHANNELS] = { 0 };
 
-static volatile uint32_t channelMaxValues[KCS_NUM_CHANNELS] = { 0 };
+static volatile uint16_t channelBaseline[KCS_NUM_CHANNELS] = { 0 };
+static volatile uint16_t baseMHDCount[KCS_NUM_CHANNELS] = { 0 };
 
+static volatile uint8_t buf0Samples[KCS_NUM_CHANNELS] = { 0 };
+static volatile uint8_t buf1Samples[KCS_NUM_CHANNELS] = { 0 };
+
+static volatile uint16_t chanBuf0[KCS_NUM_CHANNELS][KCS_BUF0_SZ] = { 0 };
+static volatile uint16_t chanBuf1[KCS_NUM_CHANNELS][KCS_BUF1_SZ] = { 0 };
+
+static const uint8_t channel2hw[] = KCS_CHANNEL_IDX_2_HW;
+
+static volatile uint8_t chanPressAvail = 0;
+static volatile uint8_t chanPress = 0;
+
+static void _kcs_insertion_sort_1 (uint8_t chan)
+{
+	/* No comments here since this is the same as the preceding function */
+	for (uint8_t i = 1; i < KCS_BUF1_SZ; i++)
+	{
+		uint16_t key = chanBuf1[chan][i];
+		uint8_t j = i - 1u;
+
+		while (j < KCS_BUF0_SZ && key < chanBuf1[chan][j])
+		{
+			chanBuf1[chan][j + 1u] = chanBuf1[chan][j];
+			--j;
+		}
+		chanBuf1[chan][j + 1u] = key;
+	}
+}
+
+static void _kcs_baseline_calculation_algorithm (uint8_t chan)
+{
+	/* Thank you to MPR121 for actually sharing a baseline algorithm */
+	// case 4 is handled by the previous filter
+	// check sample direction for case 2 / case 3
+	if (buf1Samples[chan] > 1u)
+	{
+		uint16_t key = chanBuf1[chan][buf1Samples[chan]-1u];
+		// check direction for mismatch.
+		// the samples already in the buffer should all be the same direction
+		if ((key > channelBaseline[chan]
+				&& chanBuf1[chan][buf1Samples[chan]-2u] < channelBaseline[chan])
+				|| (key < channelBaseline[chan]
+				&& chanBuf1[chan][buf1Samples[chan]-2u] > channelBaseline[chan]))
+		{
+			buf1Samples[chan] = 0;
+		}
+	}
+
+	if (buf1Samples[chan] >  0)
+	{
+		uint16_t key = chanBuf1[chan][buf1Samples[chan]-1u];
+
+		// MHD amplitude mismatch, case 1
+		// filtering for case 5 handled here
+		if (key < channelBaseline[chan] - 2 * KCS_MHD
+				&& baseMHDCount[chan] < KCS_RECAL_THR)
+		{
+			baseMHDCount[chan]++;
+			buf1Samples[chan] = 0;
+		}
+		else
+		{
+			baseMHDCount[chan] = 0;
+		}
+	}
+
+	// maximum number of samples
+	if (buf1Samples[chan] >= KCS_BUF1_SZ)
+	{
+		uint16_t newBase = 0;
+		_kcs_insertion_sort_1(chan);
+		newBase = chanBuf1[chan][KCS_BUF1_IDX_MID];
+		// called NHD in the application note, different here
+		// could be one line of ternary, but nobody likes ternary operations
+		if (KCS_SLR_D > 0 && newBase < channelBaseline[chan] - KCS_SLR_D)
+		{
+			channelBaseline[chan] -= KCS_SLR_D;
+		}
+		else
+		{
+			channelBaseline[chan] = newBase;
+		}
+		if (KCS_SLR_U > 0 && newBase > channelBaseline[chan] + KCS_SLR_U)
+		{
+			channelBaseline[chan] += KCS_SLR_U;
+		}
+		else
+		{
+			channelBaseline[chan] = newBase;
+		}
+
+		buf1Samples[chan] = 0;
+	}
+}
+
+static void _kcs_buf1_handle (uint8_t chan)
+{
+	/* part of the median filter*/
+	chanBuf1[chan][buf1Samples[chan]++] = chanBuf0[chan][KCS_BUF0_IDX_MID];
+	_kcs_baseline_calculation_algorithm(chan);
+}
+
+/* TODO: see if this actually gets optimized down to a few comparisons */
+inline static void _kcs_insertion_sort_0(uint8_t chan)
+{
+	/* Called step here to honor shellsort
+	 *
+	 * Starts with sorting two elements in the array first and goes from there.
+	 */
+	for (uint8_t i = 1; i < KCS_BUF0_SZ; i++)
+	{
+		uint16_t key = chanBuf0[chan][i];
+		uint8_t j = i - 1u;
+
+		/* Compare the key to the value on the left until the array is sorted
+		 *
+		 * Indexing with J relies on a dirty unsigned indexing trick where
+		 * overflow is exploited.
+		 */
+		while (j < KCS_BUF0_SZ && key < chanBuf0[chan][j])
+		{
+			chanBuf0[chan][j + 1u] = chanBuf0[chan][j];
+			--j;
+		}
+		/* The loop above always ends with j indexed one above the target
+		 * index where we would want to store the key.
+		 *
+		 * We extend the same dirty unsigned indexing trick here.
+		 */
+		chanBuf0[chan][j + 1u] = key;
+	}
+}
+
+uint8_t _kcs_calcPressed(uint8_t channel)
+{
+	  uint16_t treshold;
+	  /* Threshold is set to 12.5% below the maximum value */
+	  /* This calculation is performed in two steps because channelBaseline is
+	   * volatile. */
+	  treshold  = channelBaseline[channel];
+	  treshold -= channelBaseline[channel] >> 3u;
+
+	  if (channelValues[channel] < treshold) {
+	    return 1;
+	  }
+	  return 0;
+}
+
+static void _kcs_buf0_handle (uint8_t chan)
+{
+	chanBuf0[chan][buf0Samples[chan]++] = channelValues[chan];
+	if (buf0Samples[chan] >= KCS_BUF0_SZ)
+	{
+		buf0Samples[chan] = 0;
+		_kcs_insertion_sort_0(chan);
+		chanPressAvail |= 1 << chan;
+		chanPress = _kcs_calcPressed(chan) << chan | (~(1 << chan) & chanPress);
+		_kcs_buf1_handle(chan);
+	}
+}
 
 void KIRICAPSENSE_Init(void)
 {
-  /* Use the default STK capacitive sensing setup */
+  /* Use kirisaki's capacitive sensing setup */
   ACMP_CapsenseInit_TypeDef capsenseInit = {
     false,            /* fullBias */
     false,            /* halfBias */
@@ -62,7 +222,7 @@ void KIRICAPSENSE_Init(void)
   /* Set up ACMP1 in capsense mode */
   ACMP_CapsenseInit(KCS_ACMP_CAPSENSE, &capsenseInit);
   ACMP_Enable(KCS_ACMP_CAPSENSE);
-  ACMP_CapsenseChannelSet(KCS_ACMP_CAPSENSE, currentChannel);
+  ACMP_CapsenseChannelSet(KCS_ACMP_CAPSENSE, channel2hw[currentChannel]);
 }
 
 
@@ -84,10 +244,8 @@ void KIRICAPSENSE_IT(void)
 	/* Store value in channelValues */
 	channelValues[currentChannel] = count;
 
-	/* Update channelMaxValues */
-	if (count > channelMaxValues[currentChannel]) {
-		channelMaxValues[currentChannel] = count;
-	}
+	/* Update channelBaseline */
+	_kcs_buf0_handle(currentChannel);
 
 	/* Find the next capsense channel */
 	if (++currentChannel >= KCS_NUM_CHANNELS)
@@ -96,20 +254,28 @@ void KIRICAPSENSE_IT(void)
 	}
 
 	/* Set up this channel in the ACMP. */
-	ACMP_CapsenseChannelSet(KCS_ACMP_CAPSENSE, currentChannel);
+	ACMP_CapsenseChannelSet(KCS_ACMP_CAPSENSE, channel2hw[currentChannel]);
 }
+
 
 bool KIRICAPSENSE_getPressed(uint8_t channel)
 {
-  uint32_t treshold;
-  /* Threshold is set to 12.5% below the maximum value */
-  /* This calculation is performed in two steps because channelMaxValues is
-   * volatile. */
-  treshold  = channelMaxValues[channel];
-  treshold -= channelMaxValues[channel] >> 3;
+	EFM_ASSERT(channel < KCS_NUM_CHANNELS);
+	return chanPress & 1 << channel;
+}
 
-  if (channelValues[channel] < treshold) {
-    return true;
-  }
-  return false;
+uint8_t KIRICAPSENSE_pressReady(void)
+{
+	if (chanPressAvail != 0)
+	{
+		for (uint8_t chan = 0; chan <= 7; chan++)
+		{
+			if (chanPressAvail & 1 << chan)
+			{
+				chanPressAvail &= ~(1 << chan);
+				return chan;
+			}
+		}
+	}
+	return 255;
 }
