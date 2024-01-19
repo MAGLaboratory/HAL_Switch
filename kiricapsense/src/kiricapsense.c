@@ -38,7 +38,7 @@ static void _kcs_insertion_sort_1 (uint8_t chan)
 		uint16_t key = chanBuf1[chan][i];
 		uint8_t j = i - 1u;
 
-		while (j < KCS_BUF0_SZ && key < chanBuf1[chan][j])
+		while (j < KCS_BUF1_SZ && key < chanBuf1[chan][j])
 		{
 			chanBuf1[chan][j + 1u] = chanBuf1[chan][j];
 			--j;
@@ -72,15 +72,14 @@ static void _kcs_baseline_calculation_algorithm (uint8_t chan)
 
 		// MHD amplitude mismatch, case 1
 		// filtering for case 5 handled here
-		if (key < channelBaseline[chan] - 2 * KCS_MHD
-				&& baseMHDCount[chan] < KCS_RECAL_THR)
+		// first comparison for overflow prevention
+		if (channelBaseline[chan] > 2 * KCS_MHD && key < channelBaseline[chan] - 2 * KCS_MHD)
 		{
-			baseMHDCount[chan]++;
-			buf1Samples[chan] = 0;
-		}
-		else
-		{
-			baseMHDCount[chan] = 0;
+			if (baseMHDCount[chan] < KCS_RECAL_THR)
+			{
+				baseMHDCount[chan]++;
+				buf1Samples[chan] = 0;
+			}
 		}
 	}
 
@@ -92,24 +91,31 @@ static void _kcs_baseline_calculation_algorithm (uint8_t chan)
 		newBase = chanBuf1[chan][KCS_BUF1_IDX_MID];
 		// called NHD in the application note, different here
 		// could be one line of ternary, but nobody likes ternary operations
-		if (KCS_SLR_D > 0 && newBase < channelBaseline[chan] - KCS_SLR_D)
+		if (newBase < channelBaseline[chan])
 		{
-			channelBaseline[chan] -= KCS_SLR_D;
+			if (KCS_SLR_D > 0 && newBase < channelBaseline[chan] - KCS_SLR_D && baseMHDCount[chan] < KCS_RECAL_THR)
+			{
+				channelBaseline[chan] -= KCS_SLR_D;
+			}
+			else
+			{
+				channelBaseline[chan] = newBase;
+			}
 		}
-		else
+		else if (newBase > channelBaseline[chan])
 		{
-			channelBaseline[chan] = newBase;
-		}
-		if (KCS_SLR_U > 0 && newBase > channelBaseline[chan] + KCS_SLR_U)
-		{
-			channelBaseline[chan] += KCS_SLR_U;
-		}
-		else
-		{
-			channelBaseline[chan] = newBase;
+			if (KCS_SLR_U > 0 && newBase > channelBaseline[chan] + KCS_SLR_U)
+			{
+				channelBaseline[chan] += KCS_SLR_U;
+			}
+			else
+			{
+				channelBaseline[chan] = newBase;
+			}
 		}
 
 		buf1Samples[chan] = 0;
+		baseMHDCount[chan] = 0;
 	}
 }
 

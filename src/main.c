@@ -57,9 +57,9 @@ typedef union
 {
 	struct
 	{
-		uint8_t chan: 4;
-		uint8_t led : 2;
 		uint8_t output: 2;
+		uint8_t led : 2;
+		uint8_t chan: 4;
 	} b;
 	enum
 	{
