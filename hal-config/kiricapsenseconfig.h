@@ -18,11 +18,11 @@
 #define BUTTON0_CHANNEL         0             /**< Button 0 channel */
 #define BUTTON1_CHANNEL         1             /**< Button 1 channel */
 
-#define KCS_BUF0_SZ             9u
+#define KCS_BUF0_SZ             21u
 #define KCS_BUF1_SZ             3u             /**< Also called NHD in a certain application note */
 
 #define KCS_MHD                 20u
-#define KCS_RECAL_THR			2000u
+#define KCS_RECAL_THR			1000u
 #define KCS_SLR_U				0u			  /**< Both slew rates operate at call speed / channel number / KCS_BUF0_SZ / KCS_BUF1_SZ */
 #define KCS_SLR_D				20u
 

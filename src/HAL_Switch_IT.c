@@ -32,37 +32,26 @@ void SysTick_Handler(void)
 
 void Fault_Handler(void)
 {
-	SysTick_Config(14000UL);
+	/* Not using the systick function here because it sets interrupt priority too low */
+	SysTick->LOAD = (uint32_t) (14000U - 1UL); /* set reload register */
+	SysTick->VAL = 0UL; /* Load the SysTick Counter Value */
+	NVIC_SetPriority(SysTick_IRQn, 0U);
+	SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk |
+			SysTick_CTRL_TICKINT_Msk |
+			SysTick_CTRL_ENABLE_Msk; /* Enable SysTick IRQ and SysTick Timer */
 
 	CMU_ClockEnable(cmuClock_GPIO, true);
 	GPIO_PinModeSet(led1r_PORT, led1r_PIN, gpioModePushPullDrive, 1);
 	GPIO_DriveModeSet(led1r_PORT, gpioDriveModeHigh);
 
-// it would be nice to flash both red LEDs here, but led0 is not guaranteed
-
 	uint32_t msLast = msTicks;
+	uint32_t unTicked = 0;
 
 	while (1) {
-		if (msLast != msTicks) {
+		if (msTicks - msLast > (1u << 10u) || ++unTicked > 1971323u) {
 			msLast = msTicks;
-			if ((msLast >> 9) & 0x1) {
-				GPIO->P[led1r_PORT].DOUTCLR = 1 << led1r_PIN;
-			} else {
-				GPIO->P[led1r_PORT].DOUTSET = 1 << led1r_PIN;
-			}
+			unTicked = 0;
+			GPIO->P[led1r_PORT].DOUTTGL = 1 << led1r_PIN;
 		}
 	}
-}
-
-/*
- * This is the HardFault_Handler where microcontrollers enter but nobody leaves
- */
-void HardFault_Handler(void)
-{
-	Fault_Handler();
-}
-
-void NMI_Handler(void)
-{
-	Fault_Handler();
 }

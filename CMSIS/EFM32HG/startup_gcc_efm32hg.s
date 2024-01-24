@@ -270,7 +270,8 @@ Reset_Handler:
     .type   sl_app_properties, %common
 Default_Handler:
 sl_app_properties: /* Provide a dummy value for the sl_app_properties symbol. */
-    b       .
+    bl      Fault_Handler
+//  b       .
     .size   Default_Handler, . - Default_Handler
 
 /*    Macro to define default handlers. Default handler

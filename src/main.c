@@ -2,6 +2,7 @@
 #include "em_device.h"
 #include "em_chip.h"
 #include "em_cmu.h"
+#include "em_usart.h"
 #include "retargetserial.h"
 #include "hal-config.h"
 #include "kiricapsense.h"
@@ -256,27 +257,8 @@ void RelaySM(
 	}
 }
 
-/*****************************************************************************
- * Variables
- *****************************************************************************/
-volatile uint16_t msCounter = 0;
-uint16_t lastCounter = 0;
-uint8_t hbscale = 0;
-uint8_t hbcounter = 0;
-
-DSMOutputType KCS_Debounce[2];
-
-uint8_t relayVec = 0;
-
-RelaySMOutputType KCS_Relay[2];
-
-int main(void)
+void GPIO_Init(void)
 {
-	/* Chip errata */
-	CHIP_Init();
-
-	RETARGET_SerialInit(); /*< does not like GCC's PIC*/
-
 	/* GPIO */
 	CMU_ClockEnable(cmuClock_GPIO, true);
 	/* LED 1 is Push-ON (active HIGH) */
@@ -300,25 +282,14 @@ int main(void)
 	GPIO_DriveModeSet(relay1_PORT, gpioDriveModeStandard); /* GPIO F */
 
 	/* GPIO D is handled by the redirect IO at the moment */
+	GPIO_PinModeSet(RETARGET_TXPORT, RETARGET_TXPIN, gpioModePushPull, 1);
+	GPIO_PinModeSet(RETARGET_RXPORT, RETARGET_RXPIN, gpioModeInputPull, 1);
+}
 
-	/* CMU for TIMER0 */
-	CMU_ClockEnable(cmuClock_HFPER, true);
-	CMU_ClockEnable(cmuClock_TIMER0, true);
-
-	/* Initialize TIMER0 */
-	/* SYSCLK is 14e6 at this point */
-	/* Prescaler is div16 */
-	/* 875 counts, but minus one from the fundamental counting principal */
-	TIMER0->CTRL = TIMER_CTRL_PRESC_DIV16;
-	TIMER0->TOP = 874u;
-	TIMER0->IEN = TIMER_IEN_OF;
-	TIMER0->CNT = 0;
-
-	KIRICAPSENSE_Init();
-
-	/* Enable TIMER0 interrupt */
-	NVIC_EnableIRQ(TIMER0_IRQn);
-
+void PWM_Init(void)
+{
+	/* Uses Timer2 to generate PWM for relay power saving */
+	/* Assumes HFPERCLK is already enabled */
 	CMU_ClockEnable(cmuClock_TIMER2, true);
 
 	/* Initialize Timer2 */
@@ -334,6 +305,155 @@ int main(void)
 	/* Enable Peripheral Routing for Relay PWM */
 	TIMER2->ROUTE = TIMER_ROUTE_LOCATION_LOC3 | TIMER_ROUTE_CC0PEN
 			| TIMER_ROUTE_CC1PEN;
+}
+
+void SYStimer_Init(void)
+{
+	/* HFPER clock must be enabled before these calls */
+	/* CMU for TIMER0 */
+	CMU_ClockEnable(cmuClock_TIMER0, true);
+
+	/* Initialize TIMER0 */
+	/* SYSCLK is 14e6 at this point */
+	/* Prescaler is div16 */
+	/* 875 counts, but minus one from the fundamental counting principal */
+	TIMER0->CTRL = TIMER_CTRL_PRESC_DIV16;
+	TIMER0->TOP = 874u;
+	TIMER0->IEN = TIMER_IEN_OF;
+	TIMER0->CNT = 0;
+}
+
+void UART_Init(void)
+{
+	USART_TypeDef *usart = RETARGET_UART;
+	USART_InitAsync_TypeDef init =
+	{
+		usartDisable, /* Disable RX/TX when initialization is complete. */
+		0, /* Use current configured reference clock for configuring baud rate. */
+		38400, /* baud */
+		usartOVS16, /* 16x oversampling. */
+		usartDatabits8, /* 8 data bits. */
+		usartNoParity, /* No parity. */
+		usartStopbits1, /* 1 stop bit. */
+		false, /* Do not disable majority vote. */
+		false, /* Not USART PRS input mode. */
+		0, /* PRS channel 0. */
+		true, /* Auto CS functionality enable/disable switch */
+	};
+	CMU_ClockEnable(RETARGET_CLK, true);
+
+	init.enable = usartDisable;
+	USART_InitAsync(usart, &init);
+
+	usart->ROUTE = USART_ROUTE_CSPEN | USART_ROUTE_RXPEN | USART_ROUTE_TXPEN
+			| USART_ROUTE_LOCATION_LOC3;
+
+	usart->CTRL |= USART_CTRL_CSINV;
+
+	/* Clear previous RX interrupts */
+	USART_IntClear(RETARGET_UART, USART_IF_RXDATAV);
+	NVIC_ClearPendingIRQ(RETARGET_IRQn);
+
+	/* Enable RX interrupts */
+	USART_IntEnable(RETARGET_UART, USART_IF_RXDATAV);
+	NVIC_EnableIRQ(RETARGET_IRQn);
+
+	/* Finally enable it */
+	USART_Enable(usart, usartEnable);
+
+}
+
+#define HB_DIV (9u) // approximately once a second, actually less
+                    // must be at least two, but it probably won't look good
+                    // at two...
+#define HB_DUTYCYCLE (16u) // select zero here to bypass the dutycycle gen
+#define HB_SKIP (5u) // number of heartbeat cycles to skip between blinks
+#define FAST_BLINK (9u) // one second
+#define SLOW_BLINK (FAST_BLINK + 2u)
+
+uint8_t hbdCount = 0; // heartbeat dutycycle counter
+uint8_t hbsCount = 0; // heartbeat skip counter
+
+void blinker(uint16_t count)
+{
+	// one: determine heart beat
+	// t1Count & (1 << HB_DIV)
+	bool hb_slow = (count & (1u << HB_DIV)) != 0u;
+	bool hb_fast = (count & (1u << (HB_DIV - 2u))) != 0u;
+	// heart beat slow _ rising edge
+	bool hbs_re = (count & ((1u << (HB_DIV + 1u)) - 1u)) == (1u << HB_DIV);
+	// heart beat fast _ rising edge
+	bool hbf_re = (count & ((1u << (HB_DIV - 1u)) - 1u)) == (1u << (HB_DIV - 2u));
+	bool hb_internal = hb_fast && hb_slow;
+	if (hbs_re == true && hbsCount < HB_SKIP)
+	{
+		hbsCount++;
+	}
+	else if (hbs_re == true)
+	{
+		hbsCount = 0;
+	}
+	// compute heartbeat skip
+	hb_internal = hb_internal && (hbsCount == 0);
+
+	// two: LED duty cycle limiter
+	if (hb_internal == true && hbf_re == true)
+	{
+		hbdCount = 1;
+		LED_Write(0, eLED_G, eOUT_ON);
+		LED_Write(1, eLED_G, eOUT_ON);
+		USART_Tx(RETARGET_UART, 'b');
+	}
+
+	// if the selected dutycycle is 0, base this part
+	// off of the heatbeat generated before
+	if (hbdCount < HB_DUTYCYCLE)
+	{
+		hbdCount++;
+	}
+	else if (HB_DUTYCYCLE > 0u || hb_internal == false)
+	{
+		LED_Write(0, eLED_G, eOUT_OFF);
+		LED_Write(1, eLED_G, eOUT_OFF);
+	}
+}
+
+/*****************************************************************************
+ * Main Function and Variables
+ *****************************************************************************/
+volatile uint16_t msCounter = 0;
+uint16_t lastCounter = 0;
+uint8_t hbscale = 0;
+uint8_t hbcounter = 0;
+
+DSMOutputType KCS_Debounce[2];
+
+uint8_t relayVec = 0;
+
+RelaySMOutputType KCS_Relay[2];
+
+int main(void)
+{
+	/* Chip errata */
+	CHIP_Init();
+	for (uint8_t i = 0; i < 21; i++)
+	{
+		NVIC_SetPriority(i, 1u);
+	}
+	CMU_ClockEnable(cmuClock_HFPER, true);
+
+	GPIO_Init();
+
+	UART_Init();
+
+	SYStimer_Init();
+
+	KIRICAPSENSE_Init();
+
+	/* Enable TIMER0 interrupt */
+	NVIC_EnableIRQ(TIMER0_IRQn);
+
+	PWM_Init();
 
 	/* Start Timer0 */
 	TIMER0->CMD = TIMER_CMD_START;
@@ -350,25 +470,9 @@ int main(void)
 	{
 		if (msCounter - lastCounter >= 1u)
 		{
-			lastCounter++;
+			lastCounter += 1u;
 
-			if (++hbscale > C_HEARTBEAT_TOP)
-			{
-				hbscale = 0;
-				hbcounter++;
-			}
-
-			if ((hbcounter & (1u << (C_HB_SHIFT + 2u)))
-					&& (hbcounter & (1u << C_HB_SHIFT)))
-			{
-				LED_Write(0, eLED_G, eOUT_ON);
-				LED_Write(1, eLED_G, eOUT_ON);
-			}
-			else
-			{
-				LED_Write(0, eLED_G, eOUT_OFF);
-				LED_Write(1, eLED_G, eOUT_OFF);
-			}
+			blinker(lastCounter);
 
 			for (uint8_t touchRdy = KIRICAPSENSE_pressReady(); touchRdy != 255;
 					touchRdy = KIRICAPSENSE_pressReady())

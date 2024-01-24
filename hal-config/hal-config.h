@@ -88,7 +88,7 @@
 #define BSP_SERIAL_APP_PORT                  (HAL_SERIAL_PORT_USART1)
 #define BSP_SERIAL_APP_TX_PIN                (7U)
 #define BSP_SERIAL_APP_TX_PORT               (gpioPortD)
-#define BSP_SERIAL_APP_ROUTE_LOC             (2U)
+#define BSP_SERIAL_APP_ROUTE_LOC             (3U)
 
 #define BSP_SERIAL_APP_RX_PIN                (6U)
 #define BSP_SERIAL_APP_RX_PORT               (gpioPortD)
@@ -107,20 +107,10 @@
 // [TIMER0]$
 
 // $[TIMER1]
-#define PORTIO_TIMER1_CC1_PIN                (14U)
-#define PORTIO_TIMER1_CC1_PORT               (gpioPortC)
-#define PORTIO_TIMER1_ROUTE_LOC              (0U)
-
-#define BSP_TIMER1_CC1_PIN                   (14U)
-#define BSP_TIMER1_CC1_PORT                  (gpioPortC)
-#define BSP_TIMER1_ROUTE_LOC                 (0U)
 
 // [TIMER1]$
 
 // $[TIMER2]
-#define PORTIO_TIMER2_CC1_PIN                (12U)
-#define PORTIO_TIMER2_CC1_PORT               (gpioPortE)
-#define PORTIO_TIMER2_ROUTE_LOC              (3U)
 
 // [TIMER2]$
 
