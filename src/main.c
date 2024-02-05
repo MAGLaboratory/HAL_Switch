@@ -6,17 +6,23 @@
 #include "retargetserial.h"
 #include "hal-config.h"
 #include "kiricapsense.h"
+#include "PetitModbusPort.h"
+#include "PetitModbus.h"
 
 /*****************************************************************************
  * Defines here
  *****************************************************************************/
 #define C_HEARTBEAT_TOP (124u)
 #define C_HB_SHIFT (0)
-#define RELAY_IDX2RVEC_HOLDOFF_SHIFT(idx) (idx*2u)
+#define RELAY_INRVEC_WIDTH (3U)
+#define RELAY_IDX2RVEC_HOLDOFF_SHIFT(idx) (idx*RELAY_INRVEC_WIDTH)
 #define RELAY_IDX2RVEC_HOLDOFF(idx) (1u << RELAY_IDX2RVEC_HOLDOFF_SHIFT(idx))
-#define RELAY_IDX2RVEC_OUTPUT_SHIFT(idx) (idx*2u+1u)
+#define RELAY_IDX2RVEC_CMD_SHIFT(idx) (idx*RELAY_INRVEC_WIDTH+1u)
+#define RELAY_IDX2RVEC_CMD(idx) (1u << RELAY_IDX2RVEC_CMD_SHIFT(idx))
+#define RELAY_NUM2VEC_CMD(num, vec) ((vec & RELAY_IDX2RVEC_CMD(num)))
+#define RELAY_IDX2RVEC_OUTPUT_SHIFT(idx) (idx*RELAY_INRVEC_WIDTH+2U)
 #define RELAY_IDX2RVEC_OUTPUT(idx) (1u << RELAY_IDX2RVEC_OUTPUT_SHIFT(idx))
-#define RELAY_NUM2VEC(num, vec) (vec & 1u << ((num << 1u) + 1u))
+#define RELAY_NUM2VEC_OUTPUT(num, vec) ((vec & RELAY_IDX2RVEC_OUTPUT(num)))
 /* LED0 is inverted */
 #define LED0R_ON()  (GPIO->P[led0r_PORT].DOUTCLR = 1u << led0r_PIN)
 #define LED0G_ON()  (GPIO->P[led0g_PORT].DOUTCLR = 1u << led0g_PIN)
@@ -89,7 +95,7 @@ typedef enum
 
 typedef struct
 {
-	uint16_t cas; /*< count at start */
+	uint32_t cas; /*< count at start */
 	RelaySMStateType state;
 } RelaySMOutputType;
 
@@ -109,6 +115,37 @@ typedef union
 /*****************************************************************************
  * Functions
  *****************************************************************************/
+void PetitPortTxBegin(pu8_t data)
+{
+	PetitPortDirTx();
+	USART1->TXDATA = data;
+	USART_IntEnable(RETARGET_UART, USART_IF_TXC);
+}
+
+void PetitPortTimerStart(void)
+{
+	SysTick->LOAD = (uint32_t) (12500UL - 1UL); /* set reload register */
+	SysTick->VAL = 0UL; /* Load the SysTick Counter Value */
+	SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk |
+			SysTick_CTRL_TICKINT_Msk |
+			SysTick_CTRL_ENABLE_Msk; /* Enable SysTick IRQ and SysTick Timer */
+}
+
+void PetitPortTimerStop(void)
+{
+	SysTick->CTRL = 0;
+}
+
+void PetitPortDirTx(void)
+{
+	GPIO->P[txen_PORT].DOUTSET = 1u << txen_PIN;
+}
+
+void PetitPortDirRx(void)
+{
+	GPIO->P[txen_PORT].DOUTCLR = 1u << txen_PIN;
+}
+
 void LED_Write(uint8_t led, LEDchanType chan, uint8_t state)
 {
 	EFM_ASSERT(led < 2u);
@@ -193,13 +230,13 @@ uint8_t DebounceSM(
 void RelaySM(
 	uint8_t relayNum,
 	uint8_t relayVec,
-	uint16_t msCounter,
+	uint32_t msCounter,
 	RelaySMOutputType* out
 )
 {
 	EFM_ASSERT(relayNum < 2u);
 	/* Transitions */
-	if (RELAY_NUM2VEC(relayNum, relayVec))
+	if (RELAY_NUM2VEC_OUTPUT(relayNum, relayVec))
 	{
 		switch (out->state)
 		{
@@ -257,6 +294,126 @@ void RelaySM(
 	}
 }
 
+/*
+ * "Start Up / Shut Down" State Machine (SDSUSM)
+ */
+
+#define C_SDSU_OFF_PERIOD (30 * 1000)
+#define C_SDSU_ON_PERIOD (30 * 1000)
+
+typedef enum {
+	eSDSU_Off = 0,
+	eSDSU_NotOn,
+	eSDSU_On,
+	eSDSU_NotOff
+} SDSUSMState_Type;
+
+typedef struct{
+	uint32_t lastCounter;
+	SDSUSMState_Type State;
+}SDSUSMOutput_Type;
+
+bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMOutput_Type* Out)
+{
+	bool retval = false;
+	// transitions
+	switch (Out->State)
+	{
+	case eSDSU_Off:
+		if (Counter - Out->lastCounter < C_SDSU_OFF_PERIOD)
+		{
+			if (RELAY_NUM2VEC_CMD(num, vec))
+			{
+				Out->State = eSDSU_NotOn;
+			}
+		}
+		else
+		{
+			Out->lastCounter = Counter - C_SDSU_OFF_PERIOD; // arithmetic overflow prevention
+			if (RELAY_NUM2VEC_CMD(num, vec))
+			{
+				Out->State = eSDSU_On;
+				Out->lastCounter = Counter;
+			}
+		}
+		break;
+	case eSDSU_NotOn:
+		if (Counter - Out->lastCounter >= C_SDSU_OFF_PERIOD)
+		{
+			Out->lastCounter = Counter - C_SDSU_OFF_PERIOD;
+			if (RELAY_NUM2VEC_CMD(num, vec))
+			{
+				Out->State = eSDSU_On;
+				Out->lastCounter = Counter;
+			}
+		}
+
+		if (RELAY_NUM2VEC_CMD(num, vec) == 0)
+		{
+			Out->State = eSDSU_Off;
+		}
+		break;
+	case eSDSU_On:
+		if (Counter - Out->lastCounter < C_SDSU_ON_PERIOD)
+		{
+			if (RELAY_NUM2VEC_CMD(num, vec) == 0)
+			{
+				Out->State = eSDSU_NotOff;
+			}
+		}
+		else
+		{
+			Out->lastCounter = Counter - C_SDSU_ON_PERIOD;
+			if (RELAY_NUM2VEC_CMD(num, vec) == 0)
+			{
+				Out->State = eSDSU_Off;
+				Out->lastCounter = Counter;
+			}
+		}
+		break;
+	case eSDSU_NotOff:
+		if (Counter - Out->lastCounter >= C_SDSU_ON_PERIOD)
+		{
+			Out->lastCounter = Counter - C_SDSU_ON_PERIOD;
+			if (RELAY_NUM2VEC_CMD(num, vec) == 0)
+			{
+				Out->State = eSDSU_Off;
+				Out->lastCounter = Counter;
+			}
+		}
+
+		if (RELAY_NUM2VEC_CMD(num, vec) & 0b1)
+		{
+			Out->State = eSDSU_On;
+		}
+		break;
+	default:
+		EFM_ASSERT(0);
+		Out->State = eSDSU_Off;
+		Out->lastCounter = Counter;
+		break;
+	}
+
+	// output
+	switch (Out->State)
+	{
+	case eSDSU_Off:
+		retval = false;
+		break;
+	case eSDSU_NotOn:
+		retval = false;
+		break;
+	case eSDSU_On:
+		retval = true;
+		break;
+	case eSDSU_NotOff:
+		retval = true;
+		break;
+	}
+
+	return retval;
+}
+
 void GPIO_Init(void)
 {
 	/* GPIO */
@@ -307,7 +464,7 @@ void PWM_Init(void)
 			| TIMER_ROUTE_CC1PEN;
 }
 
-void SYStimer_Init(void)
+void msCounter_Init(void)
 {
 	/* HFPER clock must be enabled before these calls */
 	/* CMU for TIMER0 */
@@ -342,10 +499,9 @@ void UART_Init(void)
 	};
 	CMU_ClockEnable(RETARGET_CLK, true);
 
-	init.enable = usartDisable;
 	USART_InitAsync(usart, &init);
 
-	usart->ROUTE = USART_ROUTE_CSPEN | USART_ROUTE_RXPEN | USART_ROUTE_TXPEN
+	usart->ROUTE = /*USART_ROUTE_CSPEN |*/ USART_ROUTE_RXPEN | USART_ROUTE_TXPEN
 			| USART_ROUTE_LOCATION_LOC3;
 
 	usart->CTRL |= USART_CTRL_CSINV;
@@ -358,9 +514,15 @@ void UART_Init(void)
 	USART_IntEnable(RETARGET_UART, USART_IF_RXDATAV);
 	NVIC_EnableIRQ(RETARGET_IRQn);
 
+	/* Clear previous TX interrupts */
+	USART_IntClear(RETARGET_UART, USART_IF_TXC);
+	NVIC_ClearPendingIRQ(USART1_TX_IRQn);
+
+	/* Enable TX interrupts */
+	NVIC_EnableIRQ(USART1_TX_IRQn);
+
 	/* Finally enable it */
 	USART_Enable(usart, usartEnable);
-
 }
 
 #define HB_DIV (9u) // approximately once a second, actually less
@@ -373,6 +535,10 @@ void UART_Init(void)
 
 uint8_t hbdCount = 0; // heartbeat dutycycle counter
 uint8_t hbsCount = 0; // heartbeat skip counter
+
+/*
+ * Adapted from the IoT blinker.
+ */
 
 void blinker(uint16_t count)
 {
@@ -402,7 +568,6 @@ void blinker(uint16_t count)
 		hbdCount = 1;
 		LED_Write(0, eLED_G, eOUT_ON);
 		LED_Write(1, eLED_G, eOUT_ON);
-		USART_Tx(RETARGET_UART, 'b');
 	}
 
 	// if the selected dutycycle is 0, base this part
@@ -421,32 +586,38 @@ void blinker(uint16_t count)
 /*****************************************************************************
  * Main Function and Variables
  *****************************************************************************/
-volatile uint16_t msCounter = 0;
-uint16_t lastCounter = 0;
+volatile uint32_t msCounter = 0;
+uint32_t lastCounter = 0;
 uint8_t hbscale = 0;
 uint8_t hbcounter = 0;
 
-DSMOutputType KCS_Debounce[2];
+DSMOutputType WS_Debounce[2];
 
 uint8_t relayVec = 0;
 
-RelaySMOutputType KCS_Relay[2];
+RelaySMOutputType WS_Relay[2];
+
+SDSUSMOutput_Type WS_SDSU;
 
 int main(void)
 {
 	/* Chip errata */
 	CHIP_Init();
+
+	/* Set interrupt priority to let systick preempt */
 	for (uint8_t i = 0; i < 21; i++)
 	{
 		NVIC_SetPriority(i, 1u);
 	}
+	NVIC_SetPriority(SysTick_IRQn, 0U);
+
 	CMU_ClockEnable(cmuClock_HFPER, true);
 
 	GPIO_Init();
 
 	UART_Init();
 
-	SYStimer_Init();
+	msCounter_Init();
 
 	KIRICAPSENSE_Init();
 
@@ -472,27 +643,40 @@ int main(void)
 		{
 			lastCounter += 1u;
 
-			blinker(lastCounter);
-
 			for (uint8_t touchRdy = KIRICAPSENSE_pressReady(); touchRdy != 255;
 					touchRdy = KIRICAPSENSE_pressReady())
 			{
-				if (DebounceSM(KIRICAPSENSE_getPressed(touchRdy), 1u,
-						&KCS_Debounce[touchRdy]))
+				if (DebounceSM(KIRICAPSENSE_getPressed(touchRdy), 10u,
+						&WS_Debounce[touchRdy]))
 				{
 					if ((relayVec & RELAY_IDX2RVEC_HOLDOFF(touchRdy)) == 0u)
 					{
 						relayVec |= RELAY_IDX2RVEC_HOLDOFF(touchRdy); /*< Enter holdoff state on rising edge */
-						relayVec ^= RELAY_IDX2RVEC_OUTPUT(touchRdy); /*< Toggle output */
+						relayVec ^= RELAY_IDX2RVEC_CMD(touchRdy); /*< Toggle output */
 					}
-					LED_Write(touchRdy, eLED_B, eOUT_ON);
 				}
 				else
 				{
 					relayVec &= ~(RELAY_IDX2RVEC_HOLDOFF(touchRdy)); /* Exit holdoff state on falling edge */
-					LED_Write(touchRdy, eLED_B, eOUT_OFF);
 				}
 			}
+
+			blinker(lastCounter);
+
+			ProcessPetitModbus();
+
+			LED_Write(0u, eLED_B, (relayVec & RELAY_IDX2RVEC_CMD(0u)) != 0);
+			LED_Write(1u, eLED_B, (relayVec & RELAY_IDX2RVEC_CMD(1u)) != 0);
+
+			if (SDSUSM(0U, relayVec, msCounter, &WS_SDSU))
+			{
+				relayVec |= RELAY_IDX2RVEC_OUTPUT(0U);
+			}
+			else
+			{
+				relayVec &= ~RELAY_IDX2RVEC_OUTPUT(0U);
+			}
+			relayVec = relayVec & RELAY_IDX2RVEC_CMD(1U) ? relayVec | RELAY_IDX2RVEC_OUTPUT(1U) : relayVec & ~(RELAY_IDX2RVEC_OUTPUT(1U));
 
 			/* There are two relays and two LEDs */
 			for (uint8_t i = 0; i < 2; i++)
@@ -506,7 +690,7 @@ int main(void)
 					LED_Write(i, eLED_R, eOUT_OFF);
 				}
 
-				RelaySM(i, relayVec, msCounter, &KCS_Relay[i]);
+				RelaySM(i, relayVec, msCounter, &WS_Relay[i]);
 			}
 		}
 	}

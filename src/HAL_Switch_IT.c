@@ -11,8 +11,10 @@
 #include "em_emu.h"
 #include "kiricapsense.h"
 #include "hal-config.h"
+#include "PetitModbusPort.h"
 
-extern volatile uint16_t msCounter;
+volatile bool systick_fault_mode = false;
+extern volatile uint32_t msCounter;
 volatile uint32_t msTicks = 0;
 
 void TIMER0_IRQHandler(void)
@@ -27,12 +29,25 @@ void TIMER0_IRQHandler(void)
 
 void SysTick_Handler(void)
 {
-  msTicks++;       /* increment counter necessary in Delay()*/
+	if (systick_fault_mode)
+	{
+		msTicks++;       /* increment counter necessary in Delay()*/
+	}
+	else
+	{
+		// modbus t_1.5 timer
+		PetitPortTimerStop();
+
+		// clear the modbus receiver
+		PetitRxBufferReset();
+
+		PetitPortDirRx();
+	}
 }
 
 void Fault_Handler(void)
 {
-	/* Not using the systick function here because it sets interrupt priority too low */
+	systick_fault_mode = true;
 	SysTick->LOAD = (uint32_t) (14000U - 1UL); /* set reload register */
 	SysTick->VAL = 0UL; /* Load the SysTick Counter Value */
 	NVIC_SetPriority(SysTick_IRQn, 0U);
@@ -53,5 +68,25 @@ void Fault_Handler(void)
 			unTicked = 0;
 			GPIO->P[led1r_PORT].DOUTTGL = 1 << led1r_PIN;
 		}
+	}
+}
+
+void USART1_RX_IRQHandler(void)
+{
+	PetitRxBufferInsert(USART1->RXDATA);
+}
+
+void USART1_TX_IRQHandler(void)
+{
+	pu8_t res;
+	USART_IntClear(USART1, USART_IF_TXC);
+	if (PetitTxBufferPop(&res))
+	{
+		USART1->TXDATA = res;
+	}
+	else
+	{
+		USART_IntDisable(USART1, USART_IF_TXC);
+		PetitPortDirRx();
 	}
 }

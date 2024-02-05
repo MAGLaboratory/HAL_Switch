@@ -1,0 +1,4 @@
+[submodule "PetitModbus"]
+	path = PetitModbus
+	url = https://github.com/MAGLaboratory/PetitModbus.git
+	branch = kirisaki_features

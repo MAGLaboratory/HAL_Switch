@@ -30,6 +30,8 @@
 						<toolChain id="com.silabs.ide.si32.gcc.cdt.managedbuild.toolchain.exe.429808067" name="Si32 GNU ARM" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.toolchain.exe">
 							<option id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.overrideram.1682168821" name="Override default RAM options" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.overrideram" value="true" valueType="boolean"/>
 							<option id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.ramlength.601766912" name="LENGTH" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.ramlength" value="0x1000" valueType="string"/>
+							<option id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.usescript.578651234" name="Use custom linker script" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.usescript" value="true" valueType="boolean"/>
+							<option id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.script.83340306" name="Linker Script:" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.script" value="C:\Users\bklu\SimplicityStudio\v4_workspace\HAL_Switch\HAL_Switch.ld" valueType="string"/>
 							<targetPlatform binaryParser="org.eclipse.cdt.core.ELF;org.eclipse.cdt.core.GNU_ELF;com.silabs.ss.framework.debugger.core.BIN;com.silabs.ss.framework.debugger.core.HEX;com.silabs.ss.framework.debugger.core.S37;com.silabs.ss.framework.debugger.core.EBL;com.silabs.ss.framework.debugger.core.GBL" id="com.silabs.ide.si32.gcc.cdt.managedbuild.target.gnu.platform.base.1473905882" isAbstract="false" name="Debug Platform" osList="win32,linux,macosx" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.target.gnu.platform.base"/>
 							<builder buildPath="${workspace_loc:/HAL_Switch}/GNU ARM v7.2.1 - Debug" id="com.silabs.ide.si32.gcc.cdt.managedbuild.target.gnu.builder.base.1739528925" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Si32 GNU ARM Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.target.gnu.builder.base"/>
 							<tool id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.compiler.base.2111957769" name="GNU ARM C Compiler" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.compiler.base">
@@ -46,6 +48,7 @@
 									<listOptionValue builtIn="false" value="&quot;${StudioSdkPath}/platform/CMSIS/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${StudioSdkPath}/platform/emlib/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/kiricapsense/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/Petitmodbus/inc&quot;"/>
 								</option>
 								<option id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.compiler.def.symbols.2104130418" name="Defined symbols (-D)" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.compiler.def.symbols" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="HAL_CONFIG=1"/>
@@ -80,7 +83,8 @@
 							</tool>
 							<tool id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.base.120563521" name="GNU ARM C Linker" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.base">
 								<option id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.nostdlibs.70308589" name="No startup or default libs (-nostdlib)" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.nostdlibs" value="false" valueType="boolean"/>
-								<option id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.category.ordering.selection.1671348730" name="Linker input ordering" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.category.ordering.selection" value="./src/main.o;./emlib/em_acmp.o;./emlib/em_adc.o;./emlib/em_aes.o;./emlib/em_assert.o;./emlib/em_burtc.o;./emlib/em_can.o;./emlib/em_cmu.o;./emlib/em_core.o;./emlib/em_cryotimer.o;./emlib/em_crypto.o;./emlib/em_csen.o;./emlib/em_dac.o;./emlib/em_dbg.o;./emlib/em_dma.o;./emlib/em_ebi.o;./emlib/em_emu.o;./emlib/em_eusart.o;./emlib/em_gpcrc.o;./emlib/em_gpio.o;./emlib/em_i2c.o;./emlib/em_iadc.o;./emlib/em_idac.o;./emlib/em_int.o;./emlib/em_lcd.o;./emlib/em_ldma.o;./emlib/em_lesense.o;./emlib/em_letimer.o;./emlib/em_leuart.o;./emlib/em_mpu.o;./emlib/em_msc.o;./emlib/em_opamp.o;./emlib/em_pcnt.o;./emlib/em_pdm.o;./emlib/em_prs.o;./emlib/em_qspi.o;./emlib/em_rmu.o;./emlib/em_rtc.o;./emlib/em_rtcc.o;./emlib/em_se.o;./emlib/em_system.o;./emlib/em_timer.o;./emlib/em_usart.o;./emlib/em_vcmp.o;./emlib/em_vdac.o;./emlib/em_wdog.o;./Drivers/retargetio.o;./Drivers/retargetserial.o;./CMSIS/EFM32HG/startup_gcc_efm32hg.o;./CMSIS/EFM32HG/system_efm32hg.o;./src/HAL_Switch_IT.o;./kiricapsense/src/kiricapsense.o" valueType="string"/>
+								<option id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.category.ordering.selection.1671348730" name="Linker input ordering" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.c.linker.category.ordering.selection" value="./src/main.o;./emlib/em_acmp.o;./emlib/em_adc.o;./emlib/em_aes.o;./emlib/em_assert.o;./emlib/em_burtc.o;./emlib/em_can.o;./emlib/em_cmu.o;./emlib/em_core.o;./emlib/em_cryotimer.o;./emlib/em_crypto.o;./emlib/em_csen.o;./emlib/em_dac.o;./emlib/em_dbg.o;./emlib/em_dma.o;./emlib/em_ebi.o;./emlib/em_emu.o;./emlib/em_eusart.o;./emlib/em_gpcrc.o;./emlib/em_gpio.o;./emlib/em_i2c.o;./emlib/em_iadc.o;./emlib/em_idac.o;./emlib/em_int.o;./emlib/em_lcd.o;./emlib/em_ldma.o;./emlib/em_lesense.o;./emlib/em_letimer.o;./emlib/em_leuart.o;./emlib/em_mpu.o;./emlib/em_msc.o;./emlib/em_opamp.o;./emlib/em_pcnt.o;./emlib/em_pdm.o;./emlib/em_prs.o;./emlib/em_qspi.o;./emlib/em_rmu.o;./emlib/em_rtc.o;./emlib/em_rtcc.o;./emlib/em_se.o;./emlib/em_system.o;./emlib/em_timer.o;./emlib/em_usart.o;./emlib/em_vcmp.o;./emlib/em_vdac.o;./emlib/em_wdog.o;./CMSIS/EFM32HG/startup_gcc_efm32hg.o;./CMSIS/EFM32HG/system_efm32hg.o;./src/HAL_Switch_IT.o;./kiricapsense/src/kiricapsense.o;./PetitModbus/src/PetitCRCtable.o;./PetitModbus/src/PetitModbus.o;./PetitModbus/src/PetitReg.o" valueType="string"/>
+								<option id="gnu.c.link.option.ldflags.1642693828" name="Linker flags" superClass="gnu.c.link.option.ldflags" value="--xref" valueType="string"/>
 								<inputType id="cdt.managedbuild.tool.gnu.c.linker.input.1594227899" superClass="cdt.managedbuild.tool.gnu.c.linker.input">
 									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
 									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
@@ -92,6 +96,9 @@
 							<tool id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.archiver.base.1630016317" name="GNU ARM Archiver" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.archiver.base"/>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry excluding="PetitModbus/docs|PetitModbus/graphs|PetitModbus/exam|PetitModbus/exam/efm8bb1/src/PetitModbusPort.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
@@ -180,6 +187,9 @@
 							<tool id="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.archiver.base.1708982434" name="GNU ARM Archiver" superClass="com.silabs.ide.si32.gcc.cdt.managedbuild.tool.gnu.archiver.base"/>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry excluding="PetitModbus/docs|PetitModbus/graphs|PetitModbus/exam|PetitModbus/exam/efm8bb1/src/PetitModbusPort.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
