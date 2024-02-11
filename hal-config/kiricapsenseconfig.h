@@ -18,9 +18,11 @@
 #define BUTTON0_CHANNEL         0             /**< Button 0 channel */
 #define BUTTON1_CHANNEL         1             /**< Button 1 channel */
 
+#define KCS_CBUF_BITS			2			  /**< Number of bits in the circular buffer; must be at least 1 and no more than 8 */
+
 #define KCS_BUF0_SZ             3u
 #define KCS_BUF1_SZ             3u             /**< Also called NHD in a certain application note */
-#define KCS_BUF1_SZ				3u
+#define KCS_BUF2_SZ				3u
 
 #define KCS_MHD                 20u
 #define KCS_RECAL_THR			1000u

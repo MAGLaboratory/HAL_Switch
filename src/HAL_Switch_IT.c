@@ -11,7 +11,7 @@
 #include "em_emu.h"
 #include "kiricapsense.h"
 #include "hal-config.h"
-#include "PetitModbusPort.h"
+#include "PetitModbus.h"
 
 volatile bool systick_fault_mode = false;
 extern volatile uint32_t msCounter;
@@ -25,6 +25,7 @@ void TIMER0_IRQHandler(void)
   msCounter++;
 
   KIRICAPSENSE_IT();
+  ProcessPetitModbus();
 }
 
 void SysTick_Handler(void)

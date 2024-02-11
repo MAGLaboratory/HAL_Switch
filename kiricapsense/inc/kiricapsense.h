@@ -12,11 +12,8 @@
 #include <stdbool.h>
 #include "kiricapsenseconfig.h"
 
-#define KCS_BUF0_IDX_MID        (KCS_BUF0_SZ / 2)
-#define KCS_BUF1_IDX_MID        (KCS_BUF1_SZ / 2)
-
 void KIRICAPSENSE_Init(void);
-
+void KIRICAPSENSE_process(void);
 void KIRICAPSENSE_IT (void);
 
 uint8_t KIRICAPSENSE_pressReady(void);

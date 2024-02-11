@@ -138,12 +138,12 @@ void PetitPortTimerStop(void)
 
 void PetitPortDirTx(void)
 {
-	GPIO->P[txen_PORT].DOUTSET = 1u << txen_PIN;
+	//GPIO->P[txen_PORT].DOUTSET = 1u << txen_PIN;
 }
 
 void PetitPortDirRx(void)
 {
-	GPIO->P[txen_PORT].DOUTCLR = 1u << txen_PIN;
+	//GPIO->P[txen_PORT].DOUTCLR = 1u << txen_PIN;
 }
 
 void LED_Write(uint8_t led, LEDchanType chan, uint8_t state)
@@ -209,6 +209,7 @@ uint8_t DebounceSM(
 	DSMOutputType* out
 )
 {
+	EFM_ASSERT(debounceThreshold > 0u);
     if ((input != 0) != out->s.output)
     {
       out->s.count++;
@@ -501,7 +502,7 @@ void UART_Init(void)
 
 	USART_InitAsync(usart, &init);
 
-	usart->ROUTE = /*USART_ROUTE_CSPEN |*/ USART_ROUTE_RXPEN | USART_ROUTE_TXPEN
+	usart->ROUTE = USART_ROUTE_CSPEN | USART_ROUTE_RXPEN | USART_ROUTE_TXPEN
 			| USART_ROUTE_LOCATION_LOC3;
 
 	usart->CTRL |= USART_CTRL_CSINV;
@@ -643,10 +644,12 @@ int main(void)
 		{
 			lastCounter += 1u;
 
+			KIRICAPSENSE_process();
+
 			for (uint8_t touchRdy = KIRICAPSENSE_pressReady(); touchRdy != 255;
 					touchRdy = KIRICAPSENSE_pressReady())
 			{
-				if (DebounceSM(KIRICAPSENSE_getPressed(touchRdy), 10u,
+				if (DebounceSM(KIRICAPSENSE_getPressed(touchRdy), 1u,
 						&WS_Debounce[touchRdy]))
 				{
 					if ((relayVec & RELAY_IDX2RVEC_HOLDOFF(touchRdy)) == 0u)
@@ -662,8 +665,6 @@ int main(void)
 			}
 
 			blinker(lastCounter);
-
-			ProcessPetitModbus();
 
 			LED_Write(0u, eLED_B, (relayVec & RELAY_IDX2RVEC_CMD(0u)) != 0);
 			LED_Write(1u, eLED_B, (relayVec & RELAY_IDX2RVEC_CMD(1u)) != 0);
@@ -692,6 +693,10 @@ int main(void)
 
 				RelaySM(i, relayVec, msCounter, &WS_Relay[i]);
 			}
+		}
+		else
+		{
+			// wfi might actually stop the systick
 		}
 	}
 }
