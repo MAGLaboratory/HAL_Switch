@@ -644,6 +644,7 @@ int main(void)
 		{
 			lastCounter += 1u;
 
+			ProcessPetitModbus();
 			KIRICAPSENSE_process();
 
 			for (uint8_t touchRdy = KIRICAPSENSE_pressReady(); touchRdy != 255;

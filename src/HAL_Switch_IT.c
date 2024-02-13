@@ -19,20 +19,20 @@ volatile uint32_t msTicks = 0;
 
 void TIMER0_IRQHandler(void)
 {
-  /* Clear interrupt flag */
-  TIMER0->IFC = TIMER_IFC_OF;
+	/* Clear interrupt flag */
+	/* The only flag that should be set is the overflow flag */
+	TIMER0->IFC = TIMER_IFC_OF;
 
-  msCounter++;
+	KIRICAPSENSE_IT();
 
-  KIRICAPSENSE_IT();
-  ProcessPetitModbus();
+	msCounter++;
 }
 
 void SysTick_Handler(void)
 {
 	if (systick_fault_mode)
 	{
-		msTicks++;       /* increment counter necessary in Delay()*/
+		msTicks++; /* increment counter necessary in Delay()*/
 	}
 	else
 	{
@@ -53,8 +53,8 @@ void Fault_Handler(void)
 	SysTick->VAL = 0UL; /* Load the SysTick Counter Value */
 	NVIC_SetPriority(SysTick_IRQn, 0U);
 	SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk |
-			SysTick_CTRL_TICKINT_Msk |
-			SysTick_CTRL_ENABLE_Msk; /* Enable SysTick IRQ and SysTick Timer */
+	SysTick_CTRL_TICKINT_Msk |
+	SysTick_CTRL_ENABLE_Msk; /* Enable SysTick IRQ and SysTick Timer */
 
 	CMU_ClockEnable(cmuClock_GPIO, true);
 	GPIO_PinModeSet(led1r_PORT, led1r_PIN, gpioModePushPullDrive, 1);
@@ -63,8 +63,10 @@ void Fault_Handler(void)
 	uint32_t msLast = msTicks;
 	uint32_t unTicked = 0;
 
-	while (1) {
-		if (msTicks - msLast > (1u << 10u) || ++unTicked > 1971323u) {
+	while (1)
+	{
+		if (msTicks - msLast > (1u << 10u) || ++unTicked > 1971323u)
+		{
 			msLast = msTicks;
 			unTicked = 0;
 			GPIO->P[led1r_PORT].DOUTTGL = 1 << led1r_PIN;

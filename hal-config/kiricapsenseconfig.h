@@ -26,7 +26,7 @@
 
 #define KCS_MHD                 20u
 #define KCS_RECAL_THR			1000u
-#define KCS_SLR_U				0u			  /**< Both slew rates operate at call speed / channel number / KCS_BUF0_SZ / KCS_BUF1_SZ */
+#define KCS_SLR_U				0u			  /**< Both slew rates operate at call speed / channel number / KCS_BUF0_SZ / KCS_BUF1_SZ / KCS_BUF2_SZ */
 #define KCS_SLR_D				20u
 
 #define  KCS_CHANNEL_IDX_2_HW {BUTTON0_CHANNEL, BUTTON1_CHANNEL}
