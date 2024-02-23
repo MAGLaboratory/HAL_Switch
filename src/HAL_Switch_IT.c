@@ -23,9 +23,9 @@ void TIMER0_IRQHandler(void)
 	/* The only flag that should be set is the overflow flag */
 	TIMER0->IFC = TIMER_IFC_OF;
 
-	KIRICAPSENSE_IT();
-
 	msCounter++;
+
+	KIRICAPSENSE_IT();
 }
 
 void SysTick_Handler(void)
@@ -76,6 +76,7 @@ void Fault_Handler(void)
 
 void USART1_RX_IRQHandler(void)
 {
+	USART_IntClear(USART1, USART_IF_RXDATAV);
 	PetitRxBufferInsert(USART1->RXDATA);
 }
 
@@ -89,7 +90,6 @@ void USART1_TX_IRQHandler(void)
 	}
 	else
 	{
-		USART_IntDisable(USART1, USART_IF_TXC);
 		PetitPortDirRx();
 	}
 }

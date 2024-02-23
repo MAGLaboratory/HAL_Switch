@@ -15,7 +15,7 @@
 
 #define PETITMODBUS_SLAVE_ADDRESS                       ( 255 )
 
-#define PETITMODBUS_DLY_TOP  							( 1 )
+#define PETITMODBUS_DLY_TOP  							( 0 )
 
 #define NUMBER_OF_PETITCOILS                            ( 1 )
 #define NUMBER_OF_DISCRETE_PETITINPUTS                  ( 0 )
@@ -25,7 +25,7 @@
 #define NUMBER_OF_PETITREGISTERS                 		( 3 )
 #define NUMBER_OF_INPUT_PETITREGISTERS 					( 1 )
 
-#define NUMBER_OF_REGISTERS_IN_BUFFER                   ( 3 )
+#define NUMBER_OF_REGISTERS_IN_BUFFER                   ( 5 )
 
 #define PETITMODBUS_READ_COILS_ENABLED                  ( 1 )
 #define PETITMODBUS_READ_HOLDING_REGISTERS_ENABLED      ( 1 )

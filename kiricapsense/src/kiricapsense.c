@@ -16,6 +16,13 @@
 #define KCS_BUF2_IDX_MID		(KCS_BUF2_SZ / 2)
 #define KCS_CBUF_MASK ((1u << KCS_CBUF_BITS) - 1u)
 
+typedef enum
+{
+	eKCS_P_SORT_BUFFER_0 = 0,
+	eKCS_P_SORT_BUFFER_1 = 1,
+	eKCS_P_SORT_BUFFER_2 = 2
+} KCS_PROCESS_STATE_t;
+
 /** The current channel we are sensing. */
 static volatile uint8_t currentChannel;
 
@@ -39,14 +46,16 @@ static uint16_t chanBuf0[KCS_NUM_CHANNELS][KCS_BUF0_SZ] = { 0 };
 static uint16_t chanBuf1[KCS_NUM_CHANNELS][KCS_BUF1_SZ] = { 0 };
 static uint16_t chanBuf2[KCS_NUM_CHANNELS][KCS_BUF2_SZ] = { 0 };
 
+static KCS_PROCESS_STATE_t chanProcessState[KCS_NUM_CHANNELS] = {eKCS_P_SORT_BUFFER_0};
+
 static const uint8_t channel2hw[] = KCS_CHANNEL_IDX_2_HW;
 
 static volatile uint8_t chanPressAvail = 0;
 static volatile uint8_t chanPress = 0;
 
 /* Internal Function Prototypes */
-static void _kcs_buf0_handle (uint8_t chan, uint16_t value);
-static void _kcs_buf1_handle (uint8_t chan);
+static uint8_t _kcs_buf0_handle (uint8_t chan, uint16_t value);
+static uint8_t _kcs_buf1_handle (uint8_t chan);
 static void _kcs_buf2_handle (uint8_t chan);
 inline static void _kcs_insertion_sort_0(uint8_t chan);
 static void _kcs_insertion_sort_1 (uint8_t chan);
@@ -136,18 +145,19 @@ uint8_t _kcs_calcPressed(uint8_t channel)
 	  return 0;
 }
 
-static void _kcs_buf0_handle (uint8_t chan, uint16_t value)
+static uint8_t _kcs_buf0_handle (uint8_t chan, uint16_t value)
 {
 	chanBuf0[chan][buf0Samples[chan]++] = value;
 	if (buf0Samples[chan] >= KCS_BUF0_SZ)
 	{
 		buf0Samples[chan] = 0;
 		_kcs_insertion_sort_0(chan);
-		_kcs_buf1_handle(chan);
+		return 1;
 	}
+	return 0;
 }
 
-static void _kcs_buf1_handle (uint8_t chan)
+static uint8_t _kcs_buf1_handle (uint8_t chan)
 {
 	chanBuf1[chan][buf1Samples[chan]++] = chanBuf0[chan][KCS_BUF0_IDX_MID];
 	if (buf1Samples[chan] >= KCS_BUF1_SZ)
@@ -156,8 +166,9 @@ static void _kcs_buf1_handle (uint8_t chan)
 		_kcs_insertion_sort_1(chan);
 		chanPress = _kcs_calcPressed(chan) << chan | (~(1 << chan) & chanPress);
 		chanPressAvail |= 1 << chan;
-		_kcs_buf2_handle(chan);
+		return 1;
 	}
+	return 0;
 }
 
 static void _kcs_buf2_handle (uint8_t chan)
@@ -361,7 +372,31 @@ void KIRICAPSENSE_process(void)
 		uint16_t value = 0;
 		while (_kcs_cirBuf_pop(cc, &value))
 		{
-			_kcs_buf0_handle(cc, value);
+			switch (chanProcessState[cc])
+			{
+			case eKCS_P_SORT_BUFFER_2:
+				_kcs_buf2_handle(cc);
+				_kcs_buf1_handle(cc);
+				_kcs_buf0_handle(cc, value);
+				chanProcessState[cc] = eKCS_P_SORT_BUFFER_0;
+				break;
+			case eKCS_P_SORT_BUFFER_1:
+				if (_kcs_buf1_handle(cc) != 0)
+				{
+					chanProcessState[cc] = eKCS_P_SORT_BUFFER_2;
+				}
+				_kcs_buf0_handle(cc, value);
+				break;
+			case eKCS_P_SORT_BUFFER_0:
+				if (_kcs_buf0_handle(cc, value) != 0)
+				{
+					chanProcessState[cc] = eKCS_P_SORT_BUFFER_1;
+				}
+				break;
+			default:
+				chanProcessState[cc] = eKCS_P_SORT_BUFFER_0;
+				break;
+			}
 		}
 	}
 }

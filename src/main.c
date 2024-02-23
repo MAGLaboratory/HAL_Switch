@@ -119,12 +119,11 @@ void PetitPortTxBegin(pu8_t data)
 {
 	PetitPortDirTx();
 	USART1->TXDATA = data;
-	USART_IntEnable(RETARGET_UART, USART_IF_TXC);
 }
 
 void PetitPortTimerStart(void)
 {
-	SysTick->LOAD = (uint32_t) (12500UL - 1UL); /* set reload register */
+	SysTick->LOAD = (uint32_t) (10500UL - 1UL); /* set reload register */
 	SysTick->VAL = 0UL; /* Load the SysTick Counter Value */
 	SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk |
 			SysTick_CTRL_TICKINT_Msk |
@@ -415,6 +414,97 @@ bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMOutput_Type* Out)
 	return retval;
 }
 
+typedef enum
+{
+	eAOSM_Off = 0,
+	eAOSM_On,
+	eAOSM_aOff
+} AOSM_State_t;
+
+typedef struct
+{
+	AOSM_State_t state;
+	uint32_t counter;
+	uint16_t pressCounter;
+	bool lastPress;
+} AOSM_Output_t;
+
+#define C_AOSM_LONG_PRESS (1000UL)
+#define C_AOSM_ON_TIMER (1000UL * 60UL)
+#define C_AOSM_OFF_TIMER (1000UL * 60UL)
+
+/* Auto Off State Machine */
+bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
+{
+	bool onOff = false;
+
+	if (buttonPress == true)
+	{
+		out->pressCounter += out->pressCounter < C_AOSM_LONG_PRESS;
+	}
+	else
+	{
+		out->pressCounter = 0;
+	}
+
+	switch (out->state)
+	{
+	case eAOSM_Off:
+		if (out->lastPress == false && buttonPress == true)
+		{
+			out->state = eAOSM_On;
+			out->counter = msCounter;
+		}
+		break;
+	case eAOSM_On:
+		if (msCounter - out->counter >= C_AOSM_ON_TIMER)
+		{
+			out->state = eAOSM_aOff;
+			out->counter = msCounter;
+		}
+		if (out->lastPress == true && buttonPress == false)
+		{
+			out->state = eAOSM_On;
+			out->counter = msCounter;
+		}
+		if (out->pressCounter >= C_AOSM_LONG_PRESS)
+		{
+			out->state = eAOSM_Off;
+		}
+		break;
+	case eAOSM_aOff:
+		if (out->lastPress == true && buttonPress == false)
+		{
+			out->state = eAOSM_On;
+			out->counter = msCounter;
+		}
+		if (out->pressCounter >= C_AOSM_LONG_PRESS)
+		{
+			out->state = eAOSM_Off;
+		}
+		break;
+	default:
+		out->state = eAOSM_Off;
+		break;
+	}
+
+	switch(out->state)
+	{
+	case eAOSM_Off:
+		onOff = false;
+		break;
+	case eAOSM_On:
+		onOff = true;
+		break;
+	case eAOSM_aOff:
+		onOff = true;
+		break;
+	}
+	out->lastPress = buttonPress;
+
+	return onOff;
+}
+
 void GPIO_Init(void)
 {
 	/* GPIO */
@@ -439,9 +529,10 @@ void GPIO_Init(void)
 	GPIO_PinModeSet(relay1_PORT, relay1_PIN, gpioModePushPullDrive, 0);
 	GPIO_DriveModeSet(relay1_PORT, gpioDriveModeStandard); /* GPIO F */
 
-	/* GPIO D is handled by the redirect IO at the moment */
+	/* GPIO D RX / TX  */
 	GPIO_PinModeSet(RETARGET_TXPORT, RETARGET_TXPIN, gpioModePushPull, 1);
 	GPIO_PinModeSet(RETARGET_RXPORT, RETARGET_RXPIN, gpioModeInputPull, 1);
+	GPIO_DriveModeSet(RETARGET_TXPORT, gpioDriveModeStandard); /* GPIO D */
 }
 
 void PWM_Init(void)
@@ -520,6 +611,7 @@ void UART_Init(void)
 	NVIC_ClearPendingIRQ(USART1_TX_IRQn);
 
 	/* Enable TX interrupts */
+	USART_IntEnable(RETARGET_UART, USART_IF_TXC);
 	NVIC_EnableIRQ(USART1_TX_IRQn);
 
 	/* Finally enable it */
@@ -587,6 +679,7 @@ void blinker(uint16_t count)
 /*****************************************************************************
  * Main Function and Variables
  *****************************************************************************/
+/* WS probably stands for Working Set or something IDK. */
 volatile uint32_t msCounter = 0;
 uint32_t lastCounter = 0;
 uint8_t hbscale = 0;
@@ -599,6 +692,8 @@ uint8_t relayVec = 0;
 RelaySMOutputType WS_Relay[2];
 
 SDSUSMOutput_Type WS_SDSU;
+
+AOSM_Output_t WS_AOSM;
 
 int main(void)
 {
@@ -650,26 +745,41 @@ int main(void)
 			for (uint8_t touchRdy = KIRICAPSENSE_pressReady(); touchRdy != 255;
 					touchRdy = KIRICAPSENSE_pressReady())
 			{
-				if (DebounceSM(KIRICAPSENSE_getPressed(touchRdy), 1u,
-						&WS_Debounce[touchRdy]))
+				if (touchRdy == 0U)
 				{
-					if ((relayVec & RELAY_IDX2RVEC_HOLDOFF(touchRdy)) == 0u)
+					// the HOLDOFF bit in the relay vector is not used here.
+					if (AOSM(KIRICAPSENSE_getPressed(touchRdy), msCounter, &WS_AOSM))
 					{
-						relayVec |= RELAY_IDX2RVEC_HOLDOFF(touchRdy); /*< Enter holdoff state on rising edge */
-						relayVec ^= RELAY_IDX2RVEC_CMD(touchRdy); /*< Toggle output */
+						relayVec |= RELAY_IDX2RVEC_CMD(touchRdy);
+					}
+					else
+					{
+						relayVec &= ~RELAY_IDX2RVEC_CMD(touchRdy);
 					}
 				}
 				else
 				{
-					relayVec &= ~(RELAY_IDX2RVEC_HOLDOFF(touchRdy)); /* Exit holdoff state on falling edge */
+					if (KIRICAPSENSE_getPressed(touchRdy))
+					{
+						if ((relayVec & RELAY_IDX2RVEC_HOLDOFF(touchRdy)) == 0u)
+						{
+							relayVec |= RELAY_IDX2RVEC_HOLDOFF(touchRdy); /*< Enter holdoff state on rising edge */
+							relayVec ^= RELAY_IDX2RVEC_CMD(touchRdy); /*< Toggle output */
+						}
+					}
+					else
+					{
+						relayVec &= ~RELAY_IDX2RVEC_HOLDOFF(touchRdy); /* Exit holdoff state on falling edge */
+					}
 				}
 			}
 
 			blinker(lastCounter);
 
-			LED_Write(0u, eLED_B, (relayVec & RELAY_IDX2RVEC_CMD(0u)) != 0);
+			LED_Write(0u, eLED_B, WS_AOSM.state == eAOSM_On);
 			LED_Write(1u, eLED_B, (relayVec & RELAY_IDX2RVEC_CMD(1u)) != 0);
 
+			/* Shut Down / Start Up State machine for the 0th relay. */
 			if (SDSUSM(0U, relayVec, msCounter, &WS_SDSU))
 			{
 				relayVec |= RELAY_IDX2RVEC_OUTPUT(0U);
