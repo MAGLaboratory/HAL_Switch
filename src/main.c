@@ -14,15 +14,21 @@
  *****************************************************************************/
 #define C_HEARTBEAT_TOP (124u)
 #define C_HB_SHIFT (0)
-#define RELAY_INRVEC_WIDTH (3U)
+#define RELAY_INRVEC_WIDTH (4U)
 #define RELAY_IDX2RVEC_HOLDOFF_SHIFT(idx) (idx*RELAY_INRVEC_WIDTH)
 #define RELAY_IDX2RVEC_HOLDOFF(idx) (1u << RELAY_IDX2RVEC_HOLDOFF_SHIFT(idx))
 #define RELAY_IDX2RVEC_CMD_SHIFT(idx) (idx*RELAY_INRVEC_WIDTH+1u)
 #define RELAY_IDX2RVEC_CMD(idx) (1u << RELAY_IDX2RVEC_CMD_SHIFT(idx))
 #define RELAY_NUM2VEC_CMD(num, vec) ((vec & RELAY_IDX2RVEC_CMD(num)))
-#define RELAY_IDX2RVEC_OUTPUT_SHIFT(idx) (idx*RELAY_INRVEC_WIDTH+2U)
+#define RELAY_IDX2RVEC_WB_SHIFT(idx) (idx*RELAY_INRVEC_WIDTH+2u)
+#define RELAY_IDX2RVEC_WB(idx) (1u << RELAY_IDX2RVEC_WB_SHIFT(idx))
+#define RELAY_NUM2VEC_WB(num, vec) ((vec & RELAY_IDX2RVEC_WB(num)))
+#define RELAY_IDX2RVEC_OUTPUT_SHIFT(idx) (idx*RELAY_INRVEC_WIDTH+3U)
 #define RELAY_IDX2RVEC_OUTPUT(idx) (1u << RELAY_IDX2RVEC_OUTPUT_SHIFT(idx))
 #define RELAY_NUM2VEC_OUTPUT(num, vec) ((vec & RELAY_IDX2RVEC_OUTPUT(num)))
+#define RELAY_VEC2_LED_ENUM(idx, vec) (\
+		(vec & (RELAY_IDX2RVEC_OUTPUT(idx) | RELAY_IDX2RVEC_WB(idx)))\
+		>> RELAY_IDX2RVEC_WB_SHIFT(idx))
 /* LED0 is inverted */
 #define LED0R_ON()  (GPIO->P[led0r_PORT].DOUTCLR = 1u << led0r_PIN)
 #define LED0G_ON()  (GPIO->P[led0g_PORT].DOUTCLR = 1u << led0g_PIN)
@@ -201,6 +207,130 @@ void LED_Write(uint8_t led, LEDchanType chan, uint8_t state)
 		break;
 	}
 }
+
+/* switch mode */
+typedef enum
+{
+	eSW_MANUAL_CONTROL_AUTO_OFF = 0,
+	eSW_MANUAL_CONTROL,
+	eSW_MACHINE_CONTROL,
+	eSW_DISABLE_CONTROL
+} SW_State_t;
+
+/* LED output modes */
+typedef enum
+{
+	eLS_Off  = 0,
+	eLS_aOn  = 0b01,
+	eLS_aOff = 0b10,
+	eLS_On   = 0b11,
+	eLS_HB,
+	eLS_NUM_STATES
+} LED_State_t;
+
+#define C_LED_ZERO_STATE {{0U, 0U, 0U}, 0U}
+
+typedef struct
+{
+	uint16_t r :4;
+	uint16_t g :4;
+	uint16_t b :4;
+} LED_Color_t;
+
+typedef struct
+{
+	LED_Color_t color;
+	uint16_t duration;
+} LED_Blink_t;
+
+LED_Blink_t LED_States[eLS_NUM_STATES][2] =
+{
+	{{{0U, 0U, 0U}, 100U}, C_LED_ZERO_STATE},
+	{{{4U, 4U, 0U}, 500U}, {{0U, 0U, 0U}, 500U}},
+	{{{8U, 8U, 8U}, 500U}, {{0U, 0U, 0U}, 500U}},
+	{{{8U, 8U, 8U}, 100U}, C_LED_ZERO_STATE},
+	{{{1U, 1U, 1U}, 100u}, C_LED_ZERO_STATE}
+};
+
+typedef struct
+{
+	uint8_t state: 1;
+	uint32_t blinkCounter;
+	uint16_t duration;
+	LED_Blink_t *lastPri;
+	LED_Blink_t *lastSec;
+} BlinkSel_Output_t;
+
+/* blink code */
+LED_Color_t blink_sel(uint32_t msCounter, LED_Blink_t *pri, LED_Blink_t *sec, BlinkSel_Output_t *out)
+{
+	if (pri != out->lastPri || sec != out->lastSec)
+	{
+		out->state = 0U;
+		out->blinkCounter = msCounter;
+		out->duration = pri->duration;
+		out->lastPri = pri;
+		out->lastSec = sec;
+	}
+
+	// do NOT give this function two colors with only zero duration
+	while (msCounter - out->blinkCounter >= out->duration)
+	{
+		out->state ^= 1U;
+		out->blinkCounter = msCounter;
+		if (out->state == 0U)
+		{
+			out->duration = pri->duration;
+		}
+		else
+		{
+			out->duration = sec->duration;
+		}
+	}
+
+	if (out->state == 0U)
+	{
+		return pri->color;
+	}
+	else
+	{
+		return sec->color;
+	}
+}
+
+
+/* soft pwm code */
+void led_pwm_out(uint8_t num, uint32_t msCounter, LED_Color_t color)
+{
+	uint8_t counter = msCounter & ((1U << 3U) - 1U);
+	if (counter >= color.r)
+	{
+		LED_Write(num, eLED_R, eOUT_OFF);
+	}
+	else
+	{
+		LED_Write(num, eLED_R, eOUT_ON);
+	}
+
+	if (counter >= color.g)
+	{
+		LED_Write(num, eLED_G, eOUT_OFF);
+	}
+	else
+	{
+		LED_Write(num, eLED_G, eOUT_ON);
+	}
+
+	if (counter >= color.b)
+	{
+		LED_Write(num, eLED_B, eOUT_OFF);
+	}
+	else
+	{
+		LED_Write(num, eLED_B, eOUT_ON);
+	}
+}
+
 
 uint8_t DebounceSM(
 	uint8_t input,
@@ -425,7 +555,7 @@ typedef struct
 {
 	AOSM_State_t state;
 	uint32_t counter;
-	uint16_t pressCounter;
+	uint32_t pressCounter;
 	bool lastPress;
 } AOSM_Output_t;
 
@@ -438,13 +568,9 @@ bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
 {
 	bool onOff = false;
 
-	if (buttonPress == true)
+	if (buttonPress == true && out->lastPress == false)
 	{
-		out->pressCounter += out->pressCounter < C_AOSM_LONG_PRESS;
-	}
-	else
-	{
-		out->pressCounter = 0;
+		out->pressCounter = msCounter;
 	}
 
 	switch (out->state)
@@ -467,7 +593,7 @@ bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
 			out->state = eAOSM_On;
 			out->counter = msCounter;
 		}
-		if (out->pressCounter >= C_AOSM_LONG_PRESS)
+		if (buttonPress == true && msCounter - out->pressCounter >= C_AOSM_LONG_PRESS)
 		{
 			out->state = eAOSM_Off;
 		}
@@ -478,7 +604,11 @@ bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
 			out->state = eAOSM_On;
 			out->counter = msCounter;
 		}
-		if (out->pressCounter >= C_AOSM_LONG_PRESS)
+		if (buttonPress == true && msCounter - out->pressCounter >= C_AOSM_LONG_PRESS)
+		{
+			out->state = eAOSM_Off;
+		}
+		if (msCounter - out->counter >= C_AOSM_OFF_TIMER)
 		{
 			out->state = eAOSM_Off;
 		}
@@ -621,19 +751,17 @@ void UART_Init(void)
 #define HB_DIV (9u) // approximately once a second, actually less
                     // must be at least two, but it probably won't look good
                     // at two...
-#define HB_DUTYCYCLE (16u) // select zero here to bypass the dutycycle gen
 #define HB_SKIP (5u) // number of heartbeat cycles to skip between blinks
 #define FAST_BLINK (9u) // one second
 #define SLOW_BLINK (FAST_BLINK + 2u)
 
-uint8_t hbdCount = 0; // heartbeat dutycycle counter
 uint8_t hbsCount = 0; // heartbeat skip counter
 
 /*
  * Adapted from the IoT blinker.
  */
 
-void blinker(uint16_t count)
+bool heartbeat_det(uint16_t count)
 {
 	// one: determine heart beat
 	// t1Count & (1 << HB_DIV)
@@ -641,8 +769,6 @@ void blinker(uint16_t count)
 	bool hb_fast = (count & (1u << (HB_DIV - 2u))) != 0u;
 	// heart beat slow _ rising edge
 	bool hbs_re = (count & ((1u << (HB_DIV + 1u)) - 1u)) == (1u << HB_DIV);
-	// heart beat fast _ rising edge
-	bool hbf_re = (count & ((1u << (HB_DIV - 1u)) - 1u)) == (1u << (HB_DIV - 2u));
 	bool hb_internal = hb_fast && hb_slow;
 	if (hbs_re == true && hbsCount < HB_SKIP)
 	{
@@ -655,24 +781,13 @@ void blinker(uint16_t count)
 	// compute heartbeat skip
 	hb_internal = hb_internal && (hbsCount == 0);
 
-	// two: LED duty cycle limiter
-	if (hb_internal == true && hbf_re == true)
+	if (hb_internal == true)
 	{
-		hbdCount = 1;
-		LED_Write(0, eLED_G, eOUT_ON);
-		LED_Write(1, eLED_G, eOUT_ON);
+		return true;
 	}
-
-	// if the selected dutycycle is 0, base this part
-	// off of the heatbeat generated before
-	if (hbdCount < HB_DUTYCYCLE)
+	else
 	{
-		hbdCount++;
-	}
-	else if (HB_DUTYCYCLE > 0u || hb_internal == false)
-	{
-		LED_Write(0, eLED_G, eOUT_OFF);
-		LED_Write(1, eLED_G, eOUT_OFF);
+		return false;
 	}
 }
 
@@ -694,6 +809,8 @@ RelaySMOutputType WS_Relay[2];
 SDSUSMOutput_Type WS_SDSU;
 
 AOSM_Output_t WS_AOSM;
+
+BlinkSel_Output_t led_bs[2];
 
 int main(void)
 {
@@ -774,11 +891,7 @@ int main(void)
 				}
 			}
 
-			blinker(lastCounter);
-
-			LED_Write(0u, eLED_B, WS_AOSM.state == eAOSM_On);
-			LED_Write(1u, eLED_B, (relayVec & RELAY_IDX2RVEC_CMD(1u)) != 0);
-
+			/* Determine relay output */
 			/* Shut Down / Start Up State machine for the 0th relay. */
 			if (SDSUSM(0U, relayVec, msCounter, &WS_SDSU))
 			{
@@ -788,22 +901,32 @@ int main(void)
 			{
 				relayVec &= ~RELAY_IDX2RVEC_OUTPUT(0U);
 			}
-			relayVec = relayVec & RELAY_IDX2RVEC_CMD(1U) ? relayVec | RELAY_IDX2RVEC_OUTPUT(1U) : relayVec & ~(RELAY_IDX2RVEC_OUTPUT(1U));
+			/* Relay 1 is determined directly from the commanded value */
+			relayVec = relayVec & RELAY_IDX2RVEC_CMD(1U) ? relayVec | RELAY_IDX2RVEC_OUTPUT(1U) : relayVec & ~RELAY_IDX2RVEC_OUTPUT(1U);
+			relayVec = relayVec & RELAY_IDX2RVEC_CMD(1U) ? relayVec | RELAY_IDX2RVEC_WB(1U) : relayVec & ~RELAY_IDX2RVEC_WB(1U);
+
+			// update the "will be" status in the relay vector
+			relayVec = WS_AOSM.state == eAOSM_On ? relayVec | RELAY_IDX2RVEC_WB(0U) : relayVec & ~RELAY_IDX2RVEC_WB(0U);
 
 			/* There are two relays and two LEDs */
 			for (uint8_t i = 0; i < 2; i++)
 			{
-				if (relayVec & RELAY_IDX2RVEC_OUTPUT(i))
-				{
-					LED_Write(i, eLED_R, eOUT_ON);
-				}
-				else
-				{
-					LED_Write(i, eLED_R, eOUT_OFF);
-				}
-
 				RelaySM(i, relayVec, msCounter, &WS_Relay[i]);
 			}
+
+			bool hb_blink = heartbeat_det(lastCounter);
+
+			for (uint8_t i = 0; i < 2; i++)
+			{
+				LED_Color_t normalColor = blink_sel(
+						msCounter,
+						&LED_States[RELAY_VEC2_LED_ENUM(i, relayVec)][0],
+						&LED_States[RELAY_VEC2_LED_ENUM(i, relayVec)][1],
+						&led_bs[i]
+				);
+				led_pwm_out(i, msCounter, hb_blink ? LED_States[eLS_HB][0].color : normalColor);
+			}
+
 		}
 		else
 		{
