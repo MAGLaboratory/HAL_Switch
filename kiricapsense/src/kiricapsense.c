@@ -137,7 +137,7 @@ uint8_t _kcs_calcPressed(uint8_t channel)
 	  /* This calculation is performed in two steps because channelBaseline is
 	   * volatile. */
 	  treshold  = channelBaseline[channel];
-	  treshold -= channelBaseline[channel] >> 3u;
+	  treshold -= channelBaseline[channel] >> 4u;
 
 	  if (chanBuf1[channel][KCS_BUF1_IDX_MID] < treshold) {
 	    return 1;
@@ -164,7 +164,7 @@ static uint8_t _kcs_buf1_handle (uint8_t chan)
 	{
 		buf1Samples[chan] = 0;
 		_kcs_insertion_sort_1(chan);
-		chanPress = _kcs_calcPressed(chan) << chan | (~(1 << chan) & chanPress);
+		chanPress = (_kcs_calcPressed(chan) << chan) | (~(1 << chan) & chanPress);
 		chanPressAvail |= 1 << chan;
 		return 1;
 	}

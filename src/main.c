@@ -247,7 +247,7 @@ LED_Blink_t LED_States[eLS_NUM_STATES][2] =
 {
 	{{{0U, 0U, 0U}, 100U}, C_LED_ZERO_STATE},
 	{{{4U, 4U, 0U}, 500U}, {{0U, 0U, 0U}, 500U}},
-	{{{8U, 8U, 8U}, 500U}, {{0U, 0U, 0U}, 500U}},
+	{{{0U, 0U, 0U}, 500U}, {{8U, 8U, 8U}, 500U}},
 	{{{8U, 8U, 8U}, 100U}, C_LED_ZERO_STATE},
 	{{{1U, 1U, 1U}, 100u}, C_LED_ZERO_STATE}
 };
@@ -548,12 +548,14 @@ typedef enum
 {
 	eAOSM_Off = 0,
 	eAOSM_On,
-	eAOSM_aOff
+	eAOSM_aOff,
+	eAOSM_mOff,
 } AOSM_State_t;
 
 typedef struct
 {
 	AOSM_State_t state;
+	AOSM_State_t lastState;
 	uint32_t counter;
 	uint32_t pressCounter;
 	bool lastPress;
@@ -562,6 +564,7 @@ typedef struct
 #define C_AOSM_LONG_PRESS (1000UL)
 #define C_AOSM_ON_TIMER (1000UL * 60UL)
 #define C_AOSM_OFF_TIMER (1000UL * 60UL)
+#define C_AOSM_MOFF_TIMER (1000UL * 60UL)
 
 /* Auto Off State Machine */
 bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
@@ -571,6 +574,7 @@ bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
 	if (buttonPress == true && out->lastPress == false)
 	{
 		out->pressCounter = msCounter;
+		out->lastState = out->state;
 	}
 
 	switch (out->state)
@@ -588,9 +592,9 @@ bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
 			out->state = eAOSM_aOff;
 			out->counter = msCounter;
 		}
-		if (out->lastPress == true && buttonPress == false)
+		if (out->lastPress == true && buttonPress == false && out->lastState != eAOSM_Off)
 		{
-			out->state = eAOSM_On;
+			out->state = eAOSM_mOff;
 			out->counter = msCounter;
 		}
 		if (buttonPress == true && msCounter - out->pressCounter >= C_AOSM_LONG_PRESS)
@@ -613,6 +617,21 @@ bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
 			out->state = eAOSM_Off;
 		}
 		break;
+	case eAOSM_mOff:
+		if (out->lastPress == true && buttonPress == false)
+		{
+			out->state = eAOSM_On;
+			out->counter = msCounter;
+		}
+		if (msCounter - out->counter >= C_AOSM_MOFF_TIMER)
+		{
+			out->state = eAOSM_Off;
+		}
+		if (buttonPress == true && msCounter - out->pressCounter >= C_AOSM_LONG_PRESS)
+		{
+			out->state = eAOSM_Off;
+		}
+		break;
 	default:
 		out->state = eAOSM_Off;
 		break;
@@ -627,6 +646,9 @@ bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
 		onOff = true;
 		break;
 	case eAOSM_aOff:
+		onOff = true;
+		break;
+	case eAOSM_mOff:
 		onOff = true;
 		break;
 	}
@@ -914,8 +936,6 @@ int main(void)
 				RelaySM(i, relayVec, msCounter, &WS_Relay[i]);
 			}
 
-			bool hb_blink = heartbeat_det(lastCounter);
-
 			for (uint8_t i = 0; i < 2; i++)
 			{
 				LED_Color_t normalColor = blink_sel(
@@ -924,7 +944,7 @@ int main(void)
 						&LED_States[RELAY_VEC2_LED_ENUM(i, relayVec)][1],
 						&led_bs[i]
 				);
-				led_pwm_out(i, msCounter, hb_blink ? LED_States[eLS_HB][0].color : normalColor);
+				led_pwm_out(i, msCounter, normalColor);
 			}
 
 		}
