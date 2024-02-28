@@ -225,10 +225,17 @@ typedef enum
 	eLS_aOff = 0b10,
 	eLS_On   = 0b11,
 	eLS_HB,
+	eLS_Dummy_System,
+	eLS_Dummy_System_aOff,
+	eLS_Motion,
+	eLS_Motion_aOff,
+	eLS_Light,
+	eLS_Light_aOff,
 	eLS_NUM_STATES
 } LED_State_t;
 
 #define C_LED_ZERO_STATE {{0U, 0U, 0U}, 0U}
+#define C_LED_BLINK_STATE {{0U, 0U, 0U}, 500U}
 
 typedef struct
 {
@@ -243,13 +250,19 @@ typedef struct
 	uint16_t duration;
 } LED_Blink_t;
 
-LED_Blink_t LED_States[eLS_NUM_STATES][2] =
+const LED_Blink_t LED_States[eLS_NUM_STATES][2] =
 {
-	{{{0U, 0U, 0U}, 100U}, C_LED_ZERO_STATE},
-	{{{4U, 4U, 0U}, 500U}, {{0U, 0U, 0U}, 500U}},
-	{{{0U, 0U, 0U}, 500U}, {{8U, 8U, 8U}, 500U}},
-	{{{8U, 8U, 8U}, 100U}, C_LED_ZERO_STATE},
-	{{{1U, 1U, 1U}, 100u}, C_LED_ZERO_STATE}
+	{{{0U, 0U, 0U}, 100U}, C_LED_ZERO_STATE}, // off
+	{{{6U, 6U, 0U}, 500U}, C_LED_BLINK_STATE}, // WB on
+	{C_LED_BLINK_STATE, {{8U, 8U, 8U}, 500U}}, // WB off
+	{{{8U, 8U, 8U}, 100U}, C_LED_ZERO_STATE}, // ON
+	{{{1U, 1U, 1U}, 100U}, C_LED_ZERO_STATE}, // heartbeat
+	{{{8U, 0U, 0U}, 100U}, C_LED_ZERO_STATE}, // red
+	{{{8U, 0U, 0U}, 500U}, C_LED_BLINK_STATE}, // red flashing
+	{{{0U, 8U, 0U}, 100U}, C_LED_ZERO_STATE}, // green
+	{{{0U, 8U, 0U}, 500U}, C_LED_BLINK_STATE}, // green
+	{{{0U, 8U, 8U}, 100U}, C_LED_ZERO_STATE}, // cyan
+	{{{0U, 8U, 8U}, 500U}, C_LED_BLINK_STATE} // cyan
 };
 
 typedef struct
@@ -257,12 +270,12 @@ typedef struct
 	uint8_t state: 1;
 	uint32_t blinkCounter;
 	uint16_t duration;
-	LED_Blink_t *lastPri;
-	LED_Blink_t *lastSec;
+	const LED_Blink_t *lastPri;
+	const LED_Blink_t *lastSec;
 } BlinkSel_Output_t;
 
 /* blink code */
-LED_Color_t blink_sel(uint32_t msCounter, LED_Blink_t *pri, LED_Blink_t *sec, BlinkSel_Output_t *out)
+LED_Color_t blink_sel(uint32_t msCounter, const LED_Blink_t *pri, const LED_Blink_t *sec, BlinkSel_Output_t *out)
 {
 	if (pri != out->lastPri || sec != out->lastSec)
 	{
@@ -428,29 +441,37 @@ void RelaySM(
  * "Start Up / Shut Down" State Machine (SDSUSM)
  */
 
-#define C_SDSU_OFF_PERIOD (30 * 1000)
-#define C_SDSU_ON_PERIOD (30 * 1000)
+#define C_SDSU_DEF_HID_OFF_PERIOD (30 * 1000)
+#define C_SDSU_DEF_HID_ON_PERIOD (30 * 1000)
 
-typedef enum {
+typedef enum
+{
 	eSDSU_Off = 0,
 	eSDSU_NotOn,
 	eSDSU_On,
 	eSDSU_NotOff
-} SDSUSMState_Type;
+} SDSUSMState_t;
 
-typedef struct{
+typedef struct
+{
+	uint32_t onPeriod;
+	uint32_t offPeriod;
+}SDSUSMCfg_t;
+
+typedef struct
+{
 	uint32_t lastCounter;
-	SDSUSMState_Type State;
-}SDSUSMOutput_Type;
+	SDSUSMState_t State;
+}SDSUSMOutput_t;
 
-bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMOutput_Type* Out)
+bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMCfg_t* cfg, SDSUSMOutput_t* Out)
 {
 	bool retval = false;
 	// transitions
 	switch (Out->State)
 	{
 	case eSDSU_Off:
-		if (Counter - Out->lastCounter < C_SDSU_OFF_PERIOD)
+		if (Counter - Out->lastCounter < cfg->offPeriod)
 		{
 			if (RELAY_NUM2VEC_CMD(num, vec))
 			{
@@ -459,7 +480,7 @@ bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMOutput_Type* Out)
 		}
 		else
 		{
-			Out->lastCounter = Counter - C_SDSU_OFF_PERIOD; // arithmetic overflow prevention
+			Out->lastCounter = Counter - cfg->offPeriod; // arithmetic overflow prevention
 			if (RELAY_NUM2VEC_CMD(num, vec))
 			{
 				Out->State = eSDSU_On;
@@ -468,9 +489,9 @@ bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMOutput_Type* Out)
 		}
 		break;
 	case eSDSU_NotOn:
-		if (Counter - Out->lastCounter >= C_SDSU_OFF_PERIOD)
+		if (Counter - Out->lastCounter >= cfg->offPeriod)
 		{
-			Out->lastCounter = Counter - C_SDSU_OFF_PERIOD;
+			Out->lastCounter = Counter - cfg->offPeriod;
 			if (RELAY_NUM2VEC_CMD(num, vec))
 			{
 				Out->State = eSDSU_On;
@@ -484,7 +505,7 @@ bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMOutput_Type* Out)
 		}
 		break;
 	case eSDSU_On:
-		if (Counter - Out->lastCounter < C_SDSU_ON_PERIOD)
+		if (Counter - Out->lastCounter < cfg->onPeriod)
 		{
 			if (RELAY_NUM2VEC_CMD(num, vec) == 0)
 			{
@@ -493,7 +514,7 @@ bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMOutput_Type* Out)
 		}
 		else
 		{
-			Out->lastCounter = Counter - C_SDSU_ON_PERIOD;
+			Out->lastCounter = Counter - cfg->onPeriod;
 			if (RELAY_NUM2VEC_CMD(num, vec) == 0)
 			{
 				Out->State = eSDSU_Off;
@@ -502,9 +523,9 @@ bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMOutput_Type* Out)
 		}
 		break;
 	case eSDSU_NotOff:
-		if (Counter - Out->lastCounter >= C_SDSU_ON_PERIOD)
+		if (Counter - Out->lastCounter >= cfg->onPeriod)
 		{
-			Out->lastCounter = Counter - C_SDSU_ON_PERIOD;
+			Out->lastCounter = Counter - cfg->onPeriod;
 			if (RELAY_NUM2VEC_CMD(num, vec) == 0)
 			{
 				Out->State = eSDSU_Off;
@@ -554,6 +575,14 @@ typedef enum
 
 typedef struct
 {
+	uint32_t long_press;
+	uint32_t on_time;
+	uint32_t aoff_time;
+	uint32_t moff_time;
+} AOSM_CFG_t;
+
+typedef struct
+{
 	AOSM_State_t state;
 	AOSM_State_t lastState;
 	uint32_t counter;
@@ -567,7 +596,7 @@ typedef struct
 #define C_AOSM_MOFF_TIMER (1000UL * 60UL)
 
 /* Auto Off State Machine */
-bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
+bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_CFG_t *cfg, AOSM_Output_t *out)
 {
 	bool onOff = false;
 
@@ -587,7 +616,7 @@ bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
 		}
 		break;
 	case eAOSM_On:
-		if (msCounter - out->counter >= C_AOSM_ON_TIMER)
+		if (cfg->on_time != 0U && msCounter - out->counter >= cfg->on_time)
 		{
 			out->state = eAOSM_aOff;
 			out->counter = msCounter;
@@ -597,7 +626,7 @@ bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
 			out->state = eAOSM_mOff;
 			out->counter = msCounter;
 		}
-		if (buttonPress == true && msCounter - out->pressCounter >= C_AOSM_LONG_PRESS)
+		if (buttonPress == true && msCounter - out->pressCounter >= cfg->long_press)
 		{
 			out->state = eAOSM_Off;
 		}
@@ -608,11 +637,11 @@ bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
 			out->state = eAOSM_On;
 			out->counter = msCounter;
 		}
-		if (buttonPress == true && msCounter - out->pressCounter >= C_AOSM_LONG_PRESS)
+		if (buttonPress == true && msCounter - out->pressCounter >= cfg->long_press)
 		{
 			out->state = eAOSM_Off;
 		}
-		if (msCounter - out->counter >= C_AOSM_OFF_TIMER)
+		if (msCounter - out->counter >= cfg->aoff_time)
 		{
 			out->state = eAOSM_Off;
 		}
@@ -623,11 +652,11 @@ bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_Output_t *out)
 			out->state = eAOSM_On;
 			out->counter = msCounter;
 		}
-		if (msCounter - out->counter >= C_AOSM_MOFF_TIMER)
+		if (msCounter - out->counter >= cfg->moff_time)
 		{
 			out->state = eAOSM_Off;
 		}
-		if (buttonPress == true && msCounter - out->pressCounter >= C_AOSM_LONG_PRESS)
+		if (buttonPress == true && msCounter - out->pressCounter >= cfg->long_press)
 		{
 			out->state = eAOSM_Off;
 		}
@@ -816,7 +845,7 @@ bool heartbeat_det(uint16_t count)
 /*****************************************************************************
  * Main Function and Variables
  *****************************************************************************/
-/* WS probably stands for Working Set or something IDK. */
+/* WS probably stands for Wall Switch or something IDK. */
 volatile uint32_t msCounter = 0;
 uint32_t lastCounter = 0;
 uint8_t hbscale = 0;
@@ -824,13 +853,52 @@ uint8_t hbcounter = 0;
 
 DSMOutputType WS_Debounce[2];
 
+/**
+ * This is some documentation about the relay vector.
+ *
+ * The output bit directly controls the relay output the relay output is fed
+ * into the relay output state machine which implements relay power reduction.
+ * The command bit is fed into the startup / shutdown state machine which
+ * implements minimum on / off times that allow the metal hallide light to
+ * properly start and stop.
+ * The "will be" bit is used to drive the LED display and provide indication
+ * on the status of the switch internally.
+ * The holdoff bit is used to act as a state machine to toggle the relay
+ * output under operation without the auto-off functionality.
+ */
 uint8_t relayVec = 0;
 
 RelaySMOutputType WS_Relay[2];
 
-SDSUSMOutput_Type WS_SDSU;
+SDSUSMCfg_t CF_SDSU[2] =
+{
+		{
+				C_SDSU_DEF_HID_ON_PERIOD,
+				C_SDSU_DEF_HID_OFF_PERIOD
+		},
+		{
+				0,
+				0
+		}
+};
+SDSUSMOutput_t WS_SDSU[2];
 
-AOSM_Output_t WS_AOSM;
+AOSM_CFG_t CF_AOSM[2] =
+{
+		{
+				C_AOSM_LONG_PRESS,
+				C_AOSM_ON_TIMER,
+				C_AOSM_OFF_TIMER,
+				C_AOSM_MOFF_TIMER
+		},
+		{
+				C_AOSM_LONG_PRESS,
+				0,
+				0,
+				0
+		}
+};
+AOSM_Output_t WS_AOSM[2];
 
 BlinkSel_Output_t led_bs[2];
 
@@ -884,51 +952,51 @@ int main(void)
 			for (uint8_t touchRdy = KIRICAPSENSE_pressReady(); touchRdy != 255;
 					touchRdy = KIRICAPSENSE_pressReady())
 			{
-				if (touchRdy == 0U)
+				// the HOLDOFF bit in the relay vector is not used here.
+				if (AOSM(KIRICAPSENSE_getPressed(touchRdy), msCounter, &CF_AOSM[touchRdy], &WS_AOSM[touchRdy]))
 				{
-					// the HOLDOFF bit in the relay vector is not used here.
-					if (AOSM(KIRICAPSENSE_getPressed(touchRdy), msCounter, &WS_AOSM))
-					{
-						relayVec |= RELAY_IDX2RVEC_CMD(touchRdy);
-					}
-					else
-					{
-						relayVec &= ~RELAY_IDX2RVEC_CMD(touchRdy);
-					}
+					relayVec |= RELAY_IDX2RVEC_CMD(touchRdy);
 				}
+				else
+				{
+					relayVec &= ~RELAY_IDX2RVEC_CMD(touchRdy);
+				}
+				/*
 				else
 				{
 					if (KIRICAPSENSE_getPressed(touchRdy))
 					{
 						if ((relayVec & RELAY_IDX2RVEC_HOLDOFF(touchRdy)) == 0u)
 						{
-							relayVec |= RELAY_IDX2RVEC_HOLDOFF(touchRdy); /*< Enter holdoff state on rising edge */
-							relayVec ^= RELAY_IDX2RVEC_CMD(touchRdy); /*< Toggle output */
+							relayVec |= RELAY_IDX2RVEC_HOLDOFF(touchRdy); // Enter holdoff state on rising edge
+							relayVec ^= RELAY_IDX2RVEC_CMD(touchRdy); // Toggle output
 						}
 					}
 					else
 					{
-						relayVec &= ~RELAY_IDX2RVEC_HOLDOFF(touchRdy); /* Exit holdoff state on falling edge */
+						relayVec &= ~RELAY_IDX2RVEC_HOLDOFF(touchRdy); // Exit holdoff state on falling edge
 					}
+				}
+				*/
+				if (SDSUSM(touchRdy, relayVec, msCounter, &CF_SDSU[touchRdy], &WS_SDSU[touchRdy]))
+				{
+					relayVec |= RELAY_IDX2RVEC_OUTPUT(touchRdy);
+				}
+				else
+				{
+					relayVec &= ~RELAY_IDX2RVEC_OUTPUT(touchRdy);
 				}
 			}
 
 			/* Determine relay output */
 			/* Shut Down / Start Up State machine for the 0th relay. */
-			if (SDSUSM(0U, relayVec, msCounter, &WS_SDSU))
-			{
-				relayVec |= RELAY_IDX2RVEC_OUTPUT(0U);
-			}
-			else
-			{
-				relayVec &= ~RELAY_IDX2RVEC_OUTPUT(0U);
-			}
 			/* Relay 1 is determined directly from the commanded value */
-			relayVec = relayVec & RELAY_IDX2RVEC_CMD(1U) ? relayVec | RELAY_IDX2RVEC_OUTPUT(1U) : relayVec & ~RELAY_IDX2RVEC_OUTPUT(1U);
-			relayVec = relayVec & RELAY_IDX2RVEC_CMD(1U) ? relayVec | RELAY_IDX2RVEC_WB(1U) : relayVec & ~RELAY_IDX2RVEC_WB(1U);
+			// relayVec = relayVec & RELAY_IDX2RVEC_CMD(1U) ? relayVec | RELAY_IDX2RVEC_OUTPUT(1U) : relayVec & ~RELAY_IDX2RVEC_OUTPUT(1U);
+			// relayVec = relayVec & RELAY_IDX2RVEC_CMD(1U) ? relayVec | RELAY_IDX2RVEC_WB(1U) : relayVec & ~RELAY_IDX2RVEC_WB(1U);
 
 			// update the "will be" status in the relay vector
-			relayVec = WS_AOSM.state == eAOSM_On ? relayVec | RELAY_IDX2RVEC_WB(0U) : relayVec & ~RELAY_IDX2RVEC_WB(0U);
+			relayVec = WS_AOSM[0U].state == eAOSM_On ? relayVec | RELAY_IDX2RVEC_WB(0U) : relayVec & ~RELAY_IDX2RVEC_WB(0U);
+			relayVec = WS_AOSM[1U].state == eAOSM_On ? relayVec | RELAY_IDX2RVEC_WB(1U) : relayVec & ~RELAY_IDX2RVEC_WB(1U);
 
 			/* There are two relays and two LEDs */
 			for (uint8_t i = 0; i < 2; i++)
