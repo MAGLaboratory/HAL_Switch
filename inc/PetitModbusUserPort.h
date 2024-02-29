@@ -5,8 +5,8 @@
  *      Author: brandon
  */
 
-#ifndef HAL_CONFIG_PETITMODBUSUSERPORT_H_
-#define HAL_CONFIG_PETITMODBUSUSERPORT_H_
+#ifndef INC_PETITMODBUSUSERPORT_H_
+#define INC_PETITMODBUSUSERPORT_H_
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -88,7 +88,7 @@
 extern void PetitPortDirTx(void);
 extern void PetitPortDirRx(void);
 
-#endif /* HAL_CONFIG_PETITMODBUSUSERPORT_H_ */
+#endif /* INC_PETITMODBUSUSERPORT_H_ */
 
 // addtogroup IoT_SV_EFM8BB1LCK_Petit_Modbus_Port
 /** @} */

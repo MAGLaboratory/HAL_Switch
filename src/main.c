@@ -1,254 +1,21 @@
+#include <stdint.h>
+#include <stdbool.h>
 #include "em_assert.h"
 #include "em_device.h"
 #include "em_chip.h"
 #include "em_cmu.h"
 #include "em_usart.h"
 #include "retargetserial.h"
-#include "hal-config.h"
 #include "kiricapsense.h"
 #include "PetitModbusPort.h"
 #include "PetitModbus.h"
+#include "../inc/hal-config.h"
+#include "../inc/input.h"
+#include "../inc/output.h"
 
 /*****************************************************************************
  * Defines here
  *****************************************************************************/
-#define C_HEARTBEAT_TOP (124u)
-#define C_HB_SHIFT (0)
-#define RELAY_INRVEC_WIDTH (4U)
-#define RELAY_IDX2RVEC_HOLDOFF_SHIFT(idx) (idx*RELAY_INRVEC_WIDTH)
-#define RELAY_IDX2RVEC_HOLDOFF(idx) (1u << RELAY_IDX2RVEC_HOLDOFF_SHIFT(idx))
-#define RELAY_IDX2RVEC_CMD_SHIFT(idx) (idx*RELAY_INRVEC_WIDTH+1u)
-#define RELAY_IDX2RVEC_CMD(idx) (1u << RELAY_IDX2RVEC_CMD_SHIFT(idx))
-#define RELAY_NUM2VEC_CMD(num, vec) ((vec & RELAY_IDX2RVEC_CMD(num)))
-#define RELAY_IDX2RVEC_WB_SHIFT(idx) (idx*RELAY_INRVEC_WIDTH+2u)
-#define RELAY_IDX2RVEC_WB(idx) (1u << RELAY_IDX2RVEC_WB_SHIFT(idx))
-#define RELAY_NUM2VEC_WB(num, vec) ((vec & RELAY_IDX2RVEC_WB(num)))
-#define RELAY_IDX2RVEC_OUTPUT_SHIFT(idx) (idx*RELAY_INRVEC_WIDTH+3U)
-#define RELAY_IDX2RVEC_OUTPUT(idx) (1u << RELAY_IDX2RVEC_OUTPUT_SHIFT(idx))
-#define RELAY_NUM2VEC_OUTPUT(num, vec) ((vec & RELAY_IDX2RVEC_OUTPUT(num)))
-#define RELAY_VEC2_LED_ENUM(idx, vec) (\
-		(vec & (RELAY_IDX2RVEC_OUTPUT(idx) | RELAY_IDX2RVEC_WB(idx)))\
-		>> RELAY_IDX2RVEC_WB_SHIFT(idx))
-/* LED0 is inverted */
-#define LED0R_ON()  (GPIO->P[led0r_PORT].DOUTCLR = 1u << led0r_PIN)
-#define LED0G_ON()  (GPIO->P[led0g_PORT].DOUTCLR = 1u << led0g_PIN)
-#define LED0B_ON()  (GPIO->P[led0b_PORT].DOUTCLR = 1u << led0b_PIN)
-#define LED0R_OFF() (GPIO->P[led0r_PORT].DOUTSET = 1u << led0r_PIN)
-#define LED0G_OFF() (GPIO->P[led0g_PORT].DOUTSET = 1u << led0g_PIN)
-#define LED0B_OFF() (GPIO->P[led0b_PORT].DOUTSET = 1u << led0b_PIN)
-#define LED1R_ON()  (GPIO->P[led1r_PORT].DOUTSET = 1u << led1r_PIN)
-#define LED1G_ON()  (GPIO->P[led1g_PORT].DOUTSET = 1u << led1g_PIN)
-#define LED1B_ON()  (GPIO->P[led1b_PORT].DOUTSET = 1u << led1b_PIN)
-#define LED1R_OFF() (GPIO->P[led1r_PORT].DOUTCLR = 1u << led1r_PIN)
-#define LED1G_OFF() (GPIO->P[led1g_PORT].DOUTCLR = 1u << led1g_PIN)
-#define LED1B_OFF() (GPIO->P[led1b_PORT].DOUTCLR = 1u << led1b_PIN)
-
-#define C_RELAY_ONF_TIME  (200u)
-#define C_RELAY_ONR_TIME  (10000u-C_RELAY_ONF_TIME)
-#define C_RELAY_ONFR_TIME (200u)
-
-#define C_RELAY_CCV_FULL    (125u)
-#define C_RELAY_CCV_REDUCED (125u*70u/100u)
-
-/*****************************************************************************
- *  Type Definitions
- *****************************************************************************/
-typedef enum
-{
-	eLED_R = 0,
-	eLED_G,
-	eLED_B
-}LEDchanType;
-
-typedef enum
-{
-	eOUT_OFF = 0,
-	eOUT_ON
-}OutputType;
-
-typedef union
-{
-	struct
-	{
-		uint8_t output: 2;
-		uint8_t led : 2;
-		uint8_t chan: 4;
-	} b;
-	enum
-	{
-		eLED0_R_OFF  = 0b00000000,
-		eLED0_R_ON	 = 0b00000001,
-		eLED1_R_OFF  = 0b00000100,
-		eLED1_R_ON   = 0b00000101,
-		eLED0_G_OFF  = 0b00010000,
-		eLED0_G_ON   = 0b00010001,
-		eLED1_G_OFF  = 0b00010100,
-		eLED1_G_ON   = 0b00010101,
-		eLED0_B_OFF  = 0b00100000,
-		eLED0_B_ON   = 0b00100001,
-		eLED1_B_OFF  = 0b00100100,
-		eLED1_B_ON   = 0b00100101
-	} m;
-} LEDMagicType;
-
-typedef enum
-{
-	eRelaySMOff = 0,
-	eRelaySMOnFull,
-	eRelaySMOnReduced,
-	eRelaySMOnFullReseat
-} RelaySMStateType;
-
-typedef struct
-{
-	uint32_t cas; /*< count at start */
-	RelaySMStateType state;
-} RelaySMOutputType;
-
-/* Debounce State Machine */
-typedef struct
-{
-  uint8_t count : 7;
-  uint8_t output : 1;
-} DSMOutputStorageBitfieldType;
-
-typedef union
-{
-  uint8_t c;
-  DSMOutputStorageBitfieldType s;
-} DSMOutputType;
-
-/*****************************************************************************
- * Functions
- *****************************************************************************/
-void PetitPortTxBegin(pu8_t data)
-{
-	PetitPortDirTx();
-	USART1->TXDATA = data;
-}
-
-void PetitPortTimerStart(void)
-{
-	SysTick->LOAD = (uint32_t) (10500UL - 1UL); /* set reload register */
-	SysTick->VAL = 0UL; /* Load the SysTick Counter Value */
-	SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk |
-			SysTick_CTRL_TICKINT_Msk |
-			SysTick_CTRL_ENABLE_Msk; /* Enable SysTick IRQ and SysTick Timer */
-}
-
-void PetitPortTimerStop(void)
-{
-	SysTick->CTRL = 0;
-}
-
-void PetitPortDirTx(void)
-{
-	//GPIO->P[txen_PORT].DOUTSET = 1u << txen_PIN;
-}
-
-void PetitPortDirRx(void)
-{
-	//GPIO->P[txen_PORT].DOUTCLR = 1u << txen_PIN;
-}
-
-void LED_Write(uint8_t led, LEDchanType chan, uint8_t state)
-{
-	EFM_ASSERT(led < 2u);
-	EFM_ASSERT(chan < 3u);
-	EFM_ASSERT(state < 2u);
-
-	/* construct a magic number */
-	LEDMagicType magic;
-	magic.b.chan = chan;
-	magic.b.led = led;
-	magic.b.output = state;
-
-	/* use the magic */
-	switch (magic.m)
-	{
-	case eLED0_R_OFF:
-		LED0R_OFF();
-		break;
-	case eLED0_R_ON:
-		LED0R_ON();
-		break;
-	case eLED1_R_OFF:
-		LED1R_OFF();
-		break;
-	case eLED1_R_ON:
-		LED1R_ON();
-		break;
-	case eLED0_G_OFF:
-		LED0G_OFF();
-		break;
-	case eLED0_G_ON:
-		LED0G_ON();
-		break;
-	case eLED1_G_OFF:
-		LED1G_OFF();
-		break;
-	case eLED1_G_ON:
-		LED1G_ON();
-		break;
-	case eLED0_B_OFF:
-		LED0B_OFF();
-		break;
-	case eLED0_B_ON:
-		LED0B_ON();
-		break;
-	case eLED1_B_OFF:
-		LED1B_OFF();
-		break;
-	case eLED1_B_ON:
-		LED1B_ON();
-		break;
-	default:
-		EFM_ASSERT(0);
-		break;
-	}
-}
-
-/* switch mode */
-typedef enum
-{
-	eSW_MANUAL_CONTROL_AUTO_OFF = 0,
-	eSW_MANUAL_CONTROL,
-	eSW_MACHINE_CONTROL,
-	eSW_DISABLE_CONTROL
-} SW_State_t;
-
-/* LED output modes */
-typedef enum
-{
-	eLS_Off  = 0,
-	eLS_aOn  = 0b01,
-	eLS_aOff = 0b10,
-	eLS_On   = 0b11,
-	eLS_HB,
-	eLS_Dummy_System,
-	eLS_Dummy_System_aOff,
-	eLS_Motion,
-	eLS_Motion_aOff,
-	eLS_Light,
-	eLS_Light_aOff,
-	eLS_NUM_STATES
-} LED_State_t;
-
-#define C_LED_ZERO_STATE {{0U, 0U, 0U}, 0U}
-#define C_LED_BLINK_STATE {{0U, 0U, 0U}, 500U}
-
-typedef struct
-{
-	uint16_t r :4;
-	uint16_t g :4;
-	uint16_t b :4;
-} LED_Color_t;
-
-typedef struct
-{
-	LED_Color_t color;
-	uint16_t duration;
-} LED_Blink_t;
 
 const LED_Blink_t LED_States[eLS_NUM_STATES][2] =
 {
@@ -265,426 +32,6 @@ const LED_Blink_t LED_States[eLS_NUM_STATES][2] =
 	{{{0U, 8U, 8U}, 500U}, C_LED_BLINK_STATE} // cyan
 };
 
-typedef struct
-{
-	uint8_t state: 1;
-	uint32_t blinkCounter;
-	uint16_t duration;
-	const LED_Blink_t *lastPri;
-	const LED_Blink_t *lastSec;
-} BlinkSel_Output_t;
-
-/* blink code */
-LED_Color_t blink_sel(uint32_t msCounter, const LED_Blink_t *pri, const LED_Blink_t *sec, BlinkSel_Output_t *out)
-{
-	if (pri != out->lastPri || sec != out->lastSec)
-	{
-		out->state = 0U;
-		out->blinkCounter = msCounter;
-		out->duration = pri->duration;
-		out->lastPri = pri;
-		out->lastSec = sec;
-	}
-
-	// do NOT give this function two colors with only zero duration
-	while (msCounter - out->blinkCounter >= out->duration)
-	{
-		out->state ^= 1U;
-		out->blinkCounter = msCounter;
-		if (out->state == 0U)
-		{
-			out->duration = pri->duration;
-		}
-		else
-		{
-			out->duration = sec->duration;
-		}
-	}
-
-	if (out->state == 0U)
-	{
-		return pri->color;
-	}
-	else
-	{
-		return sec->color;
-	}
-}
-
-
-/* soft pwm code */
-void led_pwm_out(uint8_t num, uint32_t msCounter, LED_Color_t color)
-{
-	uint8_t counter = msCounter & ((1U << 3U) - 1U);
-	if (counter >= color.r)
-	{
-		LED_Write(num, eLED_R, eOUT_OFF);
-	}
-	else
-	{
-		LED_Write(num, eLED_R, eOUT_ON);
-	}
-
-	if (counter >= color.g)
-	{
-		LED_Write(num, eLED_G, eOUT_OFF);
-	}
-	else
-	{
-		LED_Write(num, eLED_G, eOUT_ON);
-	}
-
-	if (counter >= color.b)
-	{
-		LED_Write(num, eLED_B, eOUT_OFF);
-	}
-	else
-	{
-		LED_Write(num, eLED_B, eOUT_ON);
-	}
-}
-
-
-uint8_t DebounceSM(
-	uint8_t input,
-	uint8_t debounceThreshold,
-	DSMOutputType* out
-)
-{
-	EFM_ASSERT(debounceThreshold > 0u);
-    if ((input != 0) != out->s.output)
-    {
-      out->s.count++;
-    }
-    else
-    {
-      out->s.count = 0;
-    }
-
-    if (out->s.count >= debounceThreshold)
-    {
-      out->s.output = !out->s.output;
-      out->s.count = 0;
-    }
-
-    return out->s.output;
-}
-
-void RelaySM(
-	uint8_t relayNum,
-	uint8_t relayVec,
-	uint32_t msCounter,
-	RelaySMOutputType* out
-)
-{
-	EFM_ASSERT(relayNum < 2u);
-	/* Transitions */
-	if (RELAY_NUM2VEC_OUTPUT(relayNum, relayVec))
-	{
-		switch (out->state)
-		{
-		case eRelaySMOff:
-			out->state = eRelaySMOnFull;
-			out->cas = msCounter;
-			break;
-		case eRelaySMOnFull:
-			if (msCounter - out->cas >= C_RELAY_ONF_TIME)
-			{
-				out->state = eRelaySMOnReduced;
-				out->cas = msCounter;
-			}
-			break;
-		case eRelaySMOnReduced:
-			if (msCounter - out->cas >= C_RELAY_ONR_TIME)
-			{
-				out->state = eRelaySMOnFullReseat;
-				out->cas = msCounter;
-			}
-			break;
-		case eRelaySMOnFullReseat:
-			if (msCounter - out->cas >= C_RELAY_ONFR_TIME)
-			{
-				out->state = eRelaySMOnReduced;
-				out->cas = msCounter;
-			}
-			break;
-		default:
-			out->state = eRelaySMOff;
-			break;
-		}
-	}
-	else
-	{
-		out->state = eRelaySMOff;
-	}
-
-	/* Output */
-	/* Since there are only two relays and the compare channel is inverted,
-	 * we can calculate the channel number by XORing the 0th bit.
-	 */
-	switch (out->state)
-	{
-	case eRelaySMOff:
-		TIMER2->CC[relayNum ^ 1u].CCVB = 0;
-		break;
-	case eRelaySMOnFullReseat:
-	case eRelaySMOnFull:
-		TIMER2->CC[relayNum ^ 1u].CCVB = C_RELAY_CCV_FULL;
-		break;
-	case eRelaySMOnReduced:
-		TIMER2->CC[relayNum ^ 1u].CCVB = C_RELAY_CCV_REDUCED;
-		break;
-	}
-}
-
-/*
- * "Start Up / Shut Down" State Machine (SDSUSM)
- */
-
-#define C_SDSU_DEF_HID_OFF_PERIOD (30 * 1000)
-#define C_SDSU_DEF_HID_ON_PERIOD (30 * 1000)
-
-typedef enum
-{
-	eSDSU_Off = 0,
-	eSDSU_NotOn,
-	eSDSU_On,
-	eSDSU_NotOff
-} SDSUSMState_t;
-
-typedef struct
-{
-	uint32_t onPeriod;
-	uint32_t offPeriod;
-}SDSUSMCfg_t;
-
-typedef struct
-{
-	uint32_t lastCounter;
-	SDSUSMState_t State;
-}SDSUSMOutput_t;
-
-bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMCfg_t* cfg, SDSUSMOutput_t* Out)
-{
-	bool retval = false;
-	// transitions
-	switch (Out->State)
-	{
-	case eSDSU_Off:
-		if (Counter - Out->lastCounter < cfg->offPeriod)
-		{
-			if (RELAY_NUM2VEC_CMD(num, vec))
-			{
-				Out->State = eSDSU_NotOn;
-			}
-		}
-		else
-		{
-			Out->lastCounter = Counter - cfg->offPeriod; // arithmetic overflow prevention
-			if (RELAY_NUM2VEC_CMD(num, vec))
-			{
-				Out->State = eSDSU_On;
-				Out->lastCounter = Counter;
-			}
-		}
-		break;
-	case eSDSU_NotOn:
-		if (Counter - Out->lastCounter >= cfg->offPeriod)
-		{
-			Out->lastCounter = Counter - cfg->offPeriod;
-			if (RELAY_NUM2VEC_CMD(num, vec))
-			{
-				Out->State = eSDSU_On;
-				Out->lastCounter = Counter;
-			}
-		}
-
-		if (RELAY_NUM2VEC_CMD(num, vec) == 0)
-		{
-			Out->State = eSDSU_Off;
-		}
-		break;
-	case eSDSU_On:
-		if (Counter - Out->lastCounter < cfg->onPeriod)
-		{
-			if (RELAY_NUM2VEC_CMD(num, vec) == 0)
-			{
-				Out->State = eSDSU_NotOff;
-			}
-		}
-		else
-		{
-			Out->lastCounter = Counter - cfg->onPeriod;
-			if (RELAY_NUM2VEC_CMD(num, vec) == 0)
-			{
-				Out->State = eSDSU_Off;
-				Out->lastCounter = Counter;
-			}
-		}
-		break;
-	case eSDSU_NotOff:
-		if (Counter - Out->lastCounter >= cfg->onPeriod)
-		{
-			Out->lastCounter = Counter - cfg->onPeriod;
-			if (RELAY_NUM2VEC_CMD(num, vec) == 0)
-			{
-				Out->State = eSDSU_Off;
-				Out->lastCounter = Counter;
-			}
-		}
-
-		if (RELAY_NUM2VEC_CMD(num, vec) & 0b1)
-		{
-			Out->State = eSDSU_On;
-		}
-		break;
-	default:
-		EFM_ASSERT(0);
-		Out->State = eSDSU_Off;
-		Out->lastCounter = Counter;
-		break;
-	}
-
-	// output
-	switch (Out->State)
-	{
-	case eSDSU_Off:
-		retval = false;
-		break;
-	case eSDSU_NotOn:
-		retval = false;
-		break;
-	case eSDSU_On:
-		retval = true;
-		break;
-	case eSDSU_NotOff:
-		retval = true;
-		break;
-	}
-
-	return retval;
-}
-
-typedef enum
-{
-	eAOSM_Off = 0,
-	eAOSM_On,
-	eAOSM_aOff,
-	eAOSM_mOff,
-} AOSM_State_t;
-
-typedef struct
-{
-	uint32_t long_press;
-	uint32_t on_time;
-	uint32_t aoff_time;
-	uint32_t moff_time;
-} AOSM_CFG_t;
-
-typedef struct
-{
-	AOSM_State_t state;
-	AOSM_State_t lastState;
-	uint32_t counter;
-	uint32_t pressCounter;
-	bool lastPress;
-} AOSM_Output_t;
-
-#define C_AOSM_LONG_PRESS (1000UL)
-#define C_AOSM_ON_TIMER (1000UL * 60UL)
-#define C_AOSM_OFF_TIMER (1000UL * 60UL)
-#define C_AOSM_MOFF_TIMER (1000UL * 60UL)
-
-/* Auto Off State Machine */
-bool AOSM(bool buttonPress, uint32_t msCounter, AOSM_CFG_t *cfg, AOSM_Output_t *out)
-{
-	bool onOff = false;
-
-	if (buttonPress == true && out->lastPress == false)
-	{
-		out->pressCounter = msCounter;
-		out->lastState = out->state;
-	}
-
-	switch (out->state)
-	{
-	case eAOSM_Off:
-		if (out->lastPress == false && buttonPress == true)
-		{
-			out->state = eAOSM_On;
-			out->counter = msCounter;
-		}
-		break;
-	case eAOSM_On:
-		if (cfg->on_time != 0U && msCounter - out->counter >= cfg->on_time)
-		{
-			out->state = eAOSM_aOff;
-			out->counter = msCounter;
-		}
-		if (out->lastPress == true && buttonPress == false && out->lastState != eAOSM_Off)
-		{
-			out->state = eAOSM_mOff;
-			out->counter = msCounter;
-		}
-		if (buttonPress == true && msCounter - out->pressCounter >= cfg->long_press)
-		{
-			out->state = eAOSM_Off;
-		}
-		break;
-	case eAOSM_aOff:
-		if (out->lastPress == true && buttonPress == false)
-		{
-			out->state = eAOSM_On;
-			out->counter = msCounter;
-		}
-		if (buttonPress == true && msCounter - out->pressCounter >= cfg->long_press)
-		{
-			out->state = eAOSM_Off;
-		}
-		if (msCounter - out->counter >= cfg->aoff_time)
-		{
-			out->state = eAOSM_Off;
-		}
-		break;
-	case eAOSM_mOff:
-		if (out->lastPress == true && buttonPress == false)
-		{
-			out->state = eAOSM_On;
-			out->counter = msCounter;
-		}
-		if (msCounter - out->counter >= cfg->moff_time)
-		{
-			out->state = eAOSM_Off;
-		}
-		if (buttonPress == true && msCounter - out->pressCounter >= cfg->long_press)
-		{
-			out->state = eAOSM_Off;
-		}
-		break;
-	default:
-		out->state = eAOSM_Off;
-		break;
-	}
-
-	switch(out->state)
-	{
-	case eAOSM_Off:
-		onOff = false;
-		break;
-	case eAOSM_On:
-		onOff = true;
-		break;
-	case eAOSM_aOff:
-		onOff = true;
-		break;
-	case eAOSM_mOff:
-		onOff = true;
-		break;
-	}
-	out->lastPress = buttonPress;
-
-	return onOff;
-}
 
 void GPIO_Init(void)
 {
@@ -757,18 +104,17 @@ void UART_Init(void)
 {
 	USART_TypeDef *usart = RETARGET_UART;
 	USART_InitAsync_TypeDef init =
-	{
-		usartDisable, /* Disable RX/TX when initialization is complete. */
-		0, /* Use current configured reference clock for configuring baud rate. */
-		38400, /* baud */
-		usartOVS16, /* 16x oversampling. */
-		usartDatabits8, /* 8 data bits. */
-		usartNoParity, /* No parity. */
-		usartStopbits1, /* 1 stop bit. */
-		false, /* Do not disable majority vote. */
-		false, /* Not USART PRS input mode. */
-		0, /* PRS channel 0. */
-		true, /* Auto CS functionality enable/disable switch */
+	{ usartDisable, /* Disable RX/TX when initialization is complete. */
+	0, /* Use current configured reference clock for configuring baud rate. */
+	38400, /* baud */
+	usartOVS16, /* 16x oversampling. */
+	usartDatabits8, /* 8 data bits. */
+	usartNoParity, /* No parity. */
+	usartStopbits1, /* 1 stop bit. */
+	false, /* Do not disable majority vote. */
+	false, /* Not USART PRS input mode. */
+	0, /* PRS channel 0. */
+	true, /* Auto CS functionality enable/disable switch */
 	};
 	CMU_ClockEnable(RETARGET_CLK, true);
 
@@ -799,105 +145,38 @@ void UART_Init(void)
 	USART_Enable(usart, usartEnable);
 }
 
-#define HB_DIV (9u) // approximately once a second, actually less
-                    // must be at least two, but it probably won't look good
-                    // at two...
-#define HB_SKIP (5u) // number of heartbeat cycles to skip between blinks
-#define FAST_BLINK (9u) // one second
-#define SLOW_BLINK (FAST_BLINK + 2u)
-
-uint8_t hbsCount = 0; // heartbeat skip counter
-
-/*
- * Adapted from the IoT blinker.
- */
-
-bool heartbeat_det(uint16_t count)
-{
-	// one: determine heart beat
-	// t1Count & (1 << HB_DIV)
-	bool hb_slow = (count & (1u << HB_DIV)) != 0u;
-	bool hb_fast = (count & (1u << (HB_DIV - 2u))) != 0u;
-	// heart beat slow _ rising edge
-	bool hbs_re = (count & ((1u << (HB_DIV + 1u)) - 1u)) == (1u << HB_DIV);
-	bool hb_internal = hb_fast && hb_slow;
-	if (hbs_re == true && hbsCount < HB_SKIP)
-	{
-		hbsCount++;
-	}
-	else if (hbs_re == true)
-	{
-		hbsCount = 0;
-	}
-	// compute heartbeat skip
-	hb_internal = hb_internal && (hbsCount == 0);
-
-	if (hb_internal == true)
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
-}
-
 /*****************************************************************************
  * Main Function and Variables
  *****************************************************************************/
 /* WS probably stands for Wall Switch or something IDK. */
 volatile uint32_t msCounter = 0;
 uint32_t lastCounter = 0;
-uint8_t hbscale = 0;
-uint8_t hbcounter = 0;
 
 DSMOutputType WS_Debounce[2];
 
-/**
- * This is some documentation about the relay vector.
- *
- * The output bit directly controls the relay output the relay output is fed
- * into the relay output state machine which implements relay power reduction.
- * The command bit is fed into the startup / shutdown state machine which
- * implements minimum on / off times that allow the metal hallide light to
- * properly start and stop.
- * The "will be" bit is used to drive the LED display and provide indication
- * on the status of the switch internally.
- * The holdoff bit is used to act as a state machine to toggle the relay
- * output under operation without the auto-off functionality.
- */
+uint8_t capVec = 0;
 uint8_t relayVec = 0;
+uint32_t pressTS[2];
 
 RelaySMOutputType WS_Relay[2];
 
 SDSUSMCfg_t CF_SDSU[2] =
 {
-		{
-				C_SDSU_DEF_HID_ON_PERIOD,
-				C_SDSU_DEF_HID_OFF_PERIOD
-		},
-		{
-				0,
-				0
-		}
-};
+{
+C_SDSU_DEF_HID_ON_PERIOD,
+C_SDSU_DEF_HID_OFF_PERIOD },
+{ 0, 0 } };
 SDSUSMOutput_t WS_SDSU[2];
 
 AOSM_CFG_t CF_AOSM[2] =
 {
-		{
-				C_AOSM_LONG_PRESS,
-				C_AOSM_ON_TIMER,
-				C_AOSM_OFF_TIMER,
-				C_AOSM_MOFF_TIMER
-		},
-		{
-				C_AOSM_LONG_PRESS,
-				0,
-				0,
-				0
-		}
-};
+{
+C_AOSM_LONG_PRESS,
+C_AOSM_ON_TIMER,
+C_AOSM_OFF_TIMER,
+C_AOSM_MOFF_TIMER },
+{
+C_AOSM_LONG_PRESS, 0, 0, 0 } };
 AOSM_Output_t WS_AOSM[2];
 
 BlinkSel_Output_t led_bs[2];
@@ -952,66 +231,46 @@ int main(void)
 			for (uint8_t touchRdy = KIRICAPSENSE_pressReady(); touchRdy != 255;
 					touchRdy = KIRICAPSENSE_pressReady())
 			{
+				Button_t button;
+
+				BIT_CHANGE(CAP_IDX2VEC_STATUS(touchRdy), capVec,
+						KIRICAPSENSE_getPressed(touchRdy));
+
+				if (CAP_RISING_EDGE(touchRdy, capVec))
+				{
+					pressTS[touchRdy] = msCounter;
+				}
+
+				button.num = touchRdy;
+				button.vec = capVec;
+				button.pressCounter = pressTS[touchRdy];
 				// the HOLDOFF bit in the relay vector is not used here.
-				if (AOSM(KIRICAPSENSE_getPressed(touchRdy), msCounter, &CF_AOSM[touchRdy], &WS_AOSM[touchRdy]))
-				{
-					relayVec |= RELAY_IDX2RVEC_CMD(touchRdy);
-				}
-				else
-				{
-					relayVec &= ~RELAY_IDX2RVEC_CMD(touchRdy);
-				}
-				/*
-				else
-				{
-					if (KIRICAPSENSE_getPressed(touchRdy))
-					{
-						if ((relayVec & RELAY_IDX2RVEC_HOLDOFF(touchRdy)) == 0u)
-						{
-							relayVec |= RELAY_IDX2RVEC_HOLDOFF(touchRdy); // Enter holdoff state on rising edge
-							relayVec ^= RELAY_IDX2RVEC_CMD(touchRdy); // Toggle output
-						}
-					}
-					else
-					{
-						relayVec &= ~RELAY_IDX2RVEC_HOLDOFF(touchRdy); // Exit holdoff state on falling edge
-					}
-				}
-				*/
-				if (SDSUSM(touchRdy, relayVec, msCounter, &CF_SDSU[touchRdy], &WS_SDSU[touchRdy]))
-				{
-					relayVec |= RELAY_IDX2RVEC_OUTPUT(touchRdy);
-				}
-				else
-				{
-					relayVec &= ~RELAY_IDX2RVEC_OUTPUT(touchRdy);
-				}
+				BIT_CHANGE(CAP_IDX2VEC_CMD(touchRdy), capVec,
+						AOSM(&button, msCounter,
+								&CF_AOSM[touchRdy], &WS_AOSM[touchRdy]));
+
+				BIT_CHANGE(CAP_IDX2VEC_HOLDOFF(touchRdy), capVec,
+						CAP_NUM2VEC_STATUS(touchRdy, capVec));
 			}
 
-			/* Determine relay output */
-			/* Shut Down / Start Up State machine for the 0th relay. */
-			/* Relay 1 is determined directly from the commanded value */
-			// relayVec = relayVec & RELAY_IDX2RVEC_CMD(1U) ? relayVec | RELAY_IDX2RVEC_OUTPUT(1U) : relayVec & ~RELAY_IDX2RVEC_OUTPUT(1U);
-			// relayVec = relayVec & RELAY_IDX2RVEC_CMD(1U) ? relayVec | RELAY_IDX2RVEC_WB(1U) : relayVec & ~RELAY_IDX2RVEC_WB(1U);
-
-			// update the "will be" status in the relay vector
-			relayVec = WS_AOSM[0U].state == eAOSM_On ? relayVec | RELAY_IDX2RVEC_WB(0U) : relayVec & ~RELAY_IDX2RVEC_WB(0U);
-			relayVec = WS_AOSM[1U].state == eAOSM_On ? relayVec | RELAY_IDX2RVEC_WB(1U) : relayVec & ~RELAY_IDX2RVEC_WB(1U);
-
-			/* There are two relays and two LEDs */
 			for (uint8_t i = 0; i < 2; i++)
 			{
+				BIT_CHANGE(REL_IDX2VEC_OUTPUT(i), relayVec,
+						SDSUSM(i, capVec, msCounter, &CF_SDSU[i],
+								&WS_SDSU[i]));
+
+				BIT_CHANGE(REL_IDX2VEC_WB(i), relayVec,
+						WS_AOSM[i].state == eAOSM_On);
+
 				RelaySM(i, relayVec, msCounter, &WS_Relay[i]);
 			}
 
 			for (uint8_t i = 0; i < 2; i++)
 			{
-				LED_Color_t normalColor = blink_sel(
-						msCounter,
-						&LED_States[RELAY_VEC2_LED_ENUM(i, relayVec)][0],
-						&LED_States[RELAY_VEC2_LED_ENUM(i, relayVec)][1],
-						&led_bs[i]
-				);
+				LED_Color_t normalColor = blink_sel(msCounter,
+						&LED_States[REL_VEC2LED_ENUM(i, relayVec)][0],
+						&LED_States[REL_VEC2LED_ENUM(i, relayVec)][1],
+						&led_bs[i]);
 				led_pwm_out(i, msCounter, normalColor);
 			}
 

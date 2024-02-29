@@ -10,7 +10,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "kiricapsenseconfig.h"
+
+#include "../../inc/kiricapsenseconfig.h"
 
 void KIRICAPSENSE_Init(void);
 void KIRICAPSENSE_process(void);

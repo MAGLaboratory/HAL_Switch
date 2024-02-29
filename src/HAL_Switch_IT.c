@@ -10,8 +10,8 @@
 #include "em_cmu.h"
 #include "em_emu.h"
 #include "kiricapsense.h"
-#include "hal-config.h"
 #include "PetitModbus.h"
+#include "../inc/hal-config.h"
 
 volatile bool systick_fault_mode = false;
 extern volatile uint32_t msCounter;
