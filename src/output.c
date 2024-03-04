@@ -194,7 +194,13 @@ void RelaySM(
 	}
 }
 
-bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMCfg_t* cfg, SDSUSMOutput_t* Out)
+// the SDSUSM is configured to enforce a minimum "offPeriod" and "onPeriod."
+// if the command bit in the input vector violates the minimum period, the
+// state machine simply keeps it off or on
+// note: the output struct tick counter is not initialized by this state
+// machine and should be initialized to zero.
+// if the struct is a global variable, it should be zeroed by default
+bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMCfg_t *cfg, SDSUSMOutput_t *Out)
 {
 	bool retval = false;
 	// transitions

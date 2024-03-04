@@ -24,12 +24,12 @@ const LED_Blink_t LED_States[eLS_NUM_STATES][2] =
 	{C_LED_BLINK_STATE, {{8U, 8U, 8U}, 500U}}, // WB off
 	{{{8U, 8U, 8U}, 100U}, C_LED_ZERO_STATE}, // ON
 	{{{1U, 1U, 1U}, 100U}, C_LED_ZERO_STATE}, // heartbeat
-	{{{8U, 0U, 0U}, 100U}, C_LED_ZERO_STATE}, // red
 	{{{8U, 0U, 0U}, 500U}, C_LED_BLINK_STATE}, // red flashing
+	{{{8U, 0U, 0U}, 100U}, C_LED_ZERO_STATE}, // red
+	{{{0U, 8U, 0U}, 500U}, C_LED_BLINK_STATE}, // green flashing
 	{{{0U, 8U, 0U}, 100U}, C_LED_ZERO_STATE}, // green
-	{{{0U, 8U, 0U}, 500U}, C_LED_BLINK_STATE}, // green
+	{{{0U, 8U, 8U}, 500U}, C_LED_BLINK_STATE}, // cyan flashing
 	{{{0U, 8U, 8U}, 100U}, C_LED_ZERO_STATE}, // cyan
-	{{{0U, 8U, 8U}, 500U}, C_LED_BLINK_STATE} // cyan
 };
 
 
@@ -161,25 +161,73 @@ uint32_t pressTS[2];
 RelaySMOutputType WS_Relay[2];
 
 SDSUSMCfg_t CF_SDSU[2] =
-{
-{
-C_SDSU_DEF_HID_ON_PERIOD,
-C_SDSU_DEF_HID_OFF_PERIOD },
-{ 0, 0 } };
+{{C_SDSU_DEF_HID_ON_PERIOD, C_SDSU_DEF_HID_OFF_PERIOD},
+{ 0, 0 }};
 SDSUSMOutput_t WS_SDSU[2];
 
 AOSM_CFG_t CF_AOSM[2] =
-{
-{
-C_AOSM_LONG_PRESS,
-C_AOSM_ON_TIMER,
-C_AOSM_OFF_TIMER,
-C_AOSM_MOFF_TIMER },
-{
-C_AOSM_LONG_PRESS, 0, 0, 0 } };
+{{C_AOSM_LONG_PRESS, C_AOSM_ON_TIMER, C_AOSM_OFF_TIMER, C_AOSM_MOFF_TIMER},
+{C_AOSM_LONG_PRESS, 0, 0, 0}};
 AOSM_Output_t WS_AOSM[2];
 
+// no struct for communication state machine
+uint32_t CSM_counter[2];
+
+ADSM_Cfg_t *pCF_ADSM[2];
+ADSM_Output_t WS_ADSM[2];
+
+Control_State_t WS_Control[2];
+Control_State_t last_WS_Control[2];
+
+LED_Blink_t *pLED_Blink_States[2][4] =
+{{&LED_States[eLS_Off][0], &LED_States[eLS_aOn][0], &LED_States[eLS_aOff][0], &LED_States[eLS_On][0]},
+{&LED_States[eLS_Off][0], &LED_States[eLS_aOn][0], &LED_States[eLS_aOff][0], &LED_States[eLS_On][0]}};
+
 BlinkSel_Output_t led_bs[2];
+
+void cap2cmd(uint8_t i)
+{
+	// set communication state machine
+	// changeover state from the capacitive vector
+	if (last_WS_Control[i] == eCON_AOSM)
+	{
+		BIT_CHANGE(COMM_IDX2VEC_CMD(i), commVec,
+				CAP_NUM2VEC_CMD(i, capVec));
+		BIT_CHANGE(COMM_IDX2VEC_STATE(i), commVec,
+				CAP_NUM2VEC_CMD(i, capVec));
+
+		if (COMM_NUM2VEC_CMD(i, capVec) != 0)
+		{
+			WS_ADSM[i].state = eADSM_On;
+		}
+		else
+		{
+			WS_ADSM[i].state = eADSM_Off;
+		}
+
+		// set RX bit and let Communication SM take over
+		commVec |= COMM_IDX2VEC_RX(i);
+	}
+	else if (last_WS_Control[i] == eCON_MAN)
+	{
+		BIT_CHANGE(COMM_IDX2VEC_CMD(i), commVec,
+				CAP_NUM2VEC_CMD(i, capVec));
+		BIT_CHANGE(COMM_IDX2VEC_STATE(i), commVec,
+				CAP_NUM2VEC_CMD(i, capVec));
+
+		if (COMM_NUM2VEC_CMD(i, capVec) != 0)
+		{
+			WS_ADSM[i].state = eADSM_On;
+		}
+		else
+		{
+			WS_ADSM[i].state = eADSM_Off;
+		}
+
+		// set RX bit and let Communication SM take over
+		commVec |= COMM_IDX2VEC_RX(i);
+	}
+}
 
 int main(void)
 {
@@ -228,6 +276,7 @@ int main(void)
 			ProcessPetitModbus();
 			KIRICAPSENSE_process();
 
+			// button calculation
 			for (uint8_t touchRdy = KIRICAPSENSE_pressReady(); touchRdy != 255;
 					touchRdy = KIRICAPSENSE_pressReady())
 			{
@@ -241,39 +290,135 @@ int main(void)
 					pressTS[touchRdy] = msCounter;
 				}
 
-				button.num = touchRdy;
-				button.vec = capVec;
-				button.pressCounter = pressTS[touchRdy];
-				// the HOLDOFF bit in the relay vector is not used here.
-				BIT_CHANGE(CAP_IDX2VEC_CMD(touchRdy), capVec,
-						AOSM(&button, msCounter,
-								&CF_AOSM[touchRdy], &WS_AOSM[touchRdy]));
-
-				BIT_CHANGE(CAP_IDX2VEC_HOLDOFF(touchRdy), capVec,
-						CAP_NUM2VEC_STATUS(touchRdy, capVec));
 			}
 
+			// process
+			for (uint8_t i = 0; i < 2; i++)
+			{
+				// transition states
+				switch(WS_Control[i])
+				{
+					case eCON_A0:
+						if (last_WS_Control[i] == eCON_MAN)
+						{
+							// transfer to auto off state machine based on
+							// manual state.  can not determine auto off time.
+							//
+							// the last state in the auto off state machine
+							// (aosm) is used for On state button presses.
+							if (CAP_NUM2VEC_CMD(i, capVec) != 0)
+							{
+								WS_AOSM[i].counter = msCounter;
+								WS_AOSM[i].state = eAOSM_On;
+								WS_AOSM[i].lastState = eAOSM_Off;
+							}
+							else
+							{
+								WS_AOSM[i].counter = msCounter;
+								WS_AOSM[i].state = eAOSM_Off;
+								WS_AOSM[i].lastState = eAOSM_Off;
+							}
+						}
+						// last control mode was commanded
+						else if (last_WS_Control[i] != eCON_AO)
+						{
+							if (COMM_NUM2VEC_CMD(i, commVec) != 0)
+							{
+								WS_AOSM[i].counter = msCounter;
+								WS_AOSM[i].state = eAOSM_On;
+								WS_AOSM[i].lastState = eAOSM_On;
+							}
+							else
+							{
+								WS_AOSM[i].counter = msCounter;
+								WS_AOSM[i].state = eAOSM_Off;
+								WS_AOSM[i].lastState = eAOSM_Off;
+							}
+						}
+						break;
+					case eCON_MAN:
+						if (last_WS_Control[i] == eCON_AOSM)
+						{
+							BIT_CHANGE(CAP_IDX2VEC_CMD(i), capVec,
+									WS_AOSM[i].state != eAOSM_Off);	
+						}
+						else if (last_WS_Control[i] != eCON_MAN)
+						{
+							BIT_CHANGE(CAP_IDX2VEC_CMD(i), capVec,
+									COMM_NUM2VEC_CMD(i, commVec));	
+						}
+						break;
+					case eCON_CMD_OVR:
+						cap2cmd(i);
+						break;
+					case eCON_CMD_MOT:
+						cap2cmd(i);
+						break;
+					case eCON_CMD_LIT:
+						cap2cmd(i);
+						break;
+					default:
+						WS_Control[i] = eCON_AO;
+						break;
+				}
+				// run states
+				switch(WS_Control[i])
+				{
+				case eCON_AO:
+					button.num = i;
+					button.vec = capVec;
+					button.pressCounter = pressTS[i];
+					BIT_CHANGE(CAP_IDX2VEC_CMD(i), capVec,
+							AOSM(&button, msCounter, &CF_AOSM[i], &WS_AOSM[i]));
+					BIT_CHANGE(REL_IDX2VEC_WB(i), relayVec,
+							WS_AOSM[i].state == eAOSM_On);
+					break;
+				case eCON_MAN:
+					if (CAP_RISING_EDGE(i, capVec))
+					{
+						capVec ^= CAP_IDX2VEC_CMD(i);
+					}
+					BIT_CHANGE(REL_IDX2VEC_WB(i), relayVec,
+							CAP_NUM2VEC_CMD(i, capVec));
+					break;
+				case eCON_CMD_OVR:
+				case eCON_CMD_MOT:
+				case eCON_CMD_LIT:
+					break;
+				}
+
+				// update holdoff value in the capacitance vector
+				// the holdoff is more or less the "last" value
+				BIT_CHANGE(CAP_IDX2VEC_HOLDOFF(i), capVec,
+						CAP_NUM2VEC_STATUS(i, capVec));
+
+				// clear RX flag
+				commVec &= ~COMM_IDX2VEC_RX(i);
+
+				last_WS_Control[i] = WS_Control[i];
+			}
+
+			// relay output
 			for (uint8_t i = 0; i < 2; i++)
 			{
 				BIT_CHANGE(REL_IDX2VEC_OUTPUT(i), relayVec,
 						SDSUSM(i, capVec, msCounter, &CF_SDSU[i],
 								&WS_SDSU[i]));
 
-				BIT_CHANGE(REL_IDX2VEC_WB(i), relayVec,
-						WS_AOSM[i].state == eAOSM_On);
-
 				RelaySM(i, relayVec, msCounter, &WS_Relay[i]);
 			}
 
+			// LED output
 			for (uint8_t i = 0; i < 2; i++)
 			{
-				LED_Color_t normalColor = blink_sel(msCounter,
-						&LED_States[REL_VEC2LED_ENUM(i, relayVec)][0],
-						&LED_States[REL_VEC2LED_ENUM(i, relayVec)][1],
-						&led_bs[i]);
+				LED_Blink_t (*currentBlink)[2] = 
+						pLED_Blink_States[i][REL_VEC2LED_ENUM(i, relayVec)];
+
+				LED_Color_t normalColor = blink_sel(msCounter, 
+						&currentBlink[0], &currentBlink[1],	&led_bs[i]);
+
 				led_pwm_out(i, msCounter, normalColor);
 			}
-
 		}
 		else
 		{
