@@ -58,9 +58,10 @@ uint8_t DebounceSM(uint8_t input, uint8_t debounceThreshold, DSMOutputType* out)
 typedef struct
 {
 	uint8_t num;
-	uint8_t vec;
+	uint8_t capVec;
+	uint8_t relayVec;
 	uint32_t pressCounter;
-} Button_t;
+} AOSM_Input_t;
 
 typedef enum
 {
@@ -88,11 +89,13 @@ typedef struct
 #define C_AOSM_LONG_PRESS (1000UL)
 #define C_AOSM_ON_TIMER (1000UL * 60UL)
 #define C_AOSM_OFF_TIMER (1000UL * 60UL)
-#define C_AOSM_MOFF_TIMER (1000UL * 60UL)
+#define C_AOSM_MOFF_TIMER (1000UL * 15UL)
 
 /* Auto Off State Machine */
-bool AOSM(Button_t *in, uint32_t msCounter, AOSM_CFG_t *cfg,
-		AOSM_Output_t *out);
+bool AOSM(AOSM_Input_t *in, uint32_t msCounter,
+		AOSM_CFG_t *cfg, AOSM_Output_t *out);
+
+#define C_COMM_THRESH (1000U*60U)
 
 void CommSM(uint8_t num, uint8_t vec, uint32_t msCounter, uint32_t thresh, uint32_t *commCounter);
 
@@ -116,7 +119,18 @@ typedef struct
 	uint32_t offThresh;
 } ADSM_Cfg_t;
 
+#define C_ADSM_ONE_MIN (60U * 1000U)
+#define C_ADSM_FIFTEEN_MINS (15U * 60U * 1000U)
+
 void ADSM(uint8_t num, uint8_t vec, uint32_t msCounter, ADSM_Cfg_t *cfg, ADSM_Output_t *out);
+
+typedef enum
+{
+	eADSM_CFG_S_OVR = 0,
+	eADSM_CFG_S_MOT,
+	eADSM_CFG_S_LIT,
+	eADSM_CFG_S_NUM
+} ADSM_Cfg_State_t;
 
 typedef enum
 {

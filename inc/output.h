@@ -86,23 +86,6 @@ typedef union
 	} m;
 } LEDMagicType;
 
-typedef enum
-{
-	eRelaySMOff = 0,
-	eRelaySMOnFull,
-	eRelaySMOnReduced,
-	eRelaySMOnFullReseat
-} RelaySMStateType;
-
-typedef struct
-{
-	uint32_t cas; /*< count at start */
-	RelaySMStateType state;
-} RelaySMOutputType;
-
-/*****************************************************************************
- * Functions
- *****************************************************************************/
 void LED_Write(uint8_t led, LEDchanType chan, uint8_t state);
 
 /* switch mode */
@@ -162,6 +145,20 @@ LED_Color_t blink_sel(uint32_t msCounter, const LED_Blink_t *pri,
 
 /* soft pwm code */
 void led_pwm_out(uint8_t num, uint32_t msCounter, LED_Color_t color);
+
+typedef enum
+{
+	eRelaySMOff = 0,
+	eRelaySMOnFull,
+	eRelaySMOnReduced,
+	eRelaySMOnFullReseat
+} RelaySMStateType;
+
+typedef struct
+{
+	uint32_t cas; /*< count at start */
+	RelaySMStateType state;
+} RelaySMOutputType;
 
 void RelaySM(uint8_t relayNum, uint8_t relayVec, uint32_t msCounter,
 		RelaySMOutputType* out);

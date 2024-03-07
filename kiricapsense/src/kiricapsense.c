@@ -37,6 +37,7 @@ static volatile uint8_t kcs_cbuf_sz_max[KCS_NUM_CHANNELS] = { 0 };
 
 static uint16_t channelBaseline[KCS_NUM_CHANNELS] = { 0 };
 static uint16_t baseMHDCount[KCS_NUM_CHANNELS] = { 0 };
+static uint16_t maxMHDCount[KCS_NUM_CHANNELS] = { 0 };
 
 static uint8_t buf0Samples[KCS_NUM_CHANNELS] = { 0 };
 static uint8_t buf1Samples[KCS_NUM_CHANNELS] = { 0 };
@@ -132,14 +133,23 @@ static void _kcs_insertion_sort_2 (uint8_t chan)
 
 uint8_t _kcs_calcPressed(uint8_t channel)
 {
-	  uint16_t treshold;
+	  uint16_t threshold = 0;
 	  /* Threshold is set to 12.5% below the maximum value */
 	  /* This calculation is performed in two steps because channelBaseline is
 	   * volatile. */
-	  treshold  = channelBaseline[channel];
-	  treshold -= channelBaseline[channel] >> 4u;
+	  if (chanPress & (1 << channel))
+	  {
+		  threshold  = channelBaseline[channel] - KCS_THRESH_CLEAR;
+	  }
+	  else
+	  {
+		  if (channelBaseline[channel] > KCS_THRESH_SET)
+		  {
+			  threshold = channelBaseline[channel] - KCS_THRESH_SET;
+		  }
+	  }
 
-	  if (chanBuf1[channel][KCS_BUF1_IDX_MID] < treshold) {
+	  if (chanBuf1[channel][KCS_BUF1_IDX_MID] < threshold) {
 	    return 1;
 	  }
 	  return 0;
@@ -164,7 +174,14 @@ static uint8_t _kcs_buf1_handle (uint8_t chan)
 	{
 		buf1Samples[chan] = 0;
 		_kcs_insertion_sort_1(chan);
-		chanPress = (_kcs_calcPressed(chan) << chan) | (~(1 << chan) & chanPress);
+		if (_kcs_calcPressed(chan))
+		{
+			chanPress |= 1 << chan;
+		}
+		else
+		{
+			chanPress &= ~(1 << chan);
+		}
 		chanPressAvail |= 1 << chan;
 		return 1;
 	}
@@ -210,6 +227,10 @@ static void _kcs_baseline_calculation_algorithm (uint8_t chan)
 			{
 				baseMHDCount[chan]++;
 				buf2Samples[chan] = 0;
+				if (baseMHDCount[chan] > maxMHDCount[chan])
+				{
+					maxMHDCount[chan] = baseMHDCount[chan];
+				}
 			}
 		}
 	}
@@ -335,7 +356,6 @@ void KIRICAPSENSE_Init(void)
   ACMP_CapsenseChannelSet(KCS_ACMP_CAPSENSE, channel2hw[currentChannel]);
 }
 
-
 /* TIMER0 IRQHandler moved somewhere else. */
 
 void KIRICAPSENSE_IT(void)
@@ -365,6 +385,7 @@ void KIRICAPSENSE_IT(void)
 	ACMP_CapsenseChannelSet(KCS_ACMP_CAPSENSE, channel2hw[currentChannel]);
 }
 
+/* 2024 notebook page 10 */
 void KIRICAPSENSE_process(void)
 {
 	for (uint8_t cc = 0; cc < KCS_NUM_CHANNELS; cc++)

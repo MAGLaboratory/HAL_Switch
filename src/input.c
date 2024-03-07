@@ -5,6 +5,7 @@
  *      Author: brandon
  */
 #include "input.h"
+#include "output.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -29,11 +30,12 @@ uint8_t DebounceSM(uint8_t input, uint8_t debounceThreshold, DSMOutputType* out)
 	return out->s.output;
 }
 
-bool AOSM(Button_t *in, uint32_t msCounter, AOSM_CFG_t *cfg, AOSM_Output_t *out)
+bool AOSM(AOSM_Input_t *in, uint32_t msCounter,
+		AOSM_CFG_t *cfg, AOSM_Output_t *out)
 {
 	bool onOff = false;
 
-	if (CAP_RISING_EDGE(in->num, in->vec))
+	if (CAP_RISING_EDGE(in->num, in->capVec))
 	{
 		out->lastState = out->state;
 	}
@@ -41,7 +43,7 @@ bool AOSM(Button_t *in, uint32_t msCounter, AOSM_CFG_t *cfg, AOSM_Output_t *out)
 	switch (out->state)
 	{
 	case eAOSM_Off:
-		if (CAP_RISING_EDGE(in->num, in->vec))
+		if (CAP_RISING_EDGE(in->num, in->capVec))
 		{
 			out->state = eAOSM_On;
 			out->counter = msCounter;
@@ -53,24 +55,31 @@ bool AOSM(Button_t *in, uint32_t msCounter, AOSM_CFG_t *cfg, AOSM_Output_t *out)
 			out->state = eAOSM_aOff;
 			out->counter = msCounter;
 		}
-		if (CAP_FALLING_EDGE(in->num, in->vec) && out->lastState != eAOSM_Off)
+		if (CAP_FALLING_EDGE(in->num, in->capVec) && out->lastState != eAOSM_Off)
 		{
-			out->state = eAOSM_mOff;
-			out->counter = msCounter;
+			if (REL_NUM2VEC_OUTPUT(in->num, in->relayVec) != 0)
+			{
+				out->state = eAOSM_mOff;
+				out->counter = msCounter;
+			}
+			else
+			{
+				out->state = eAOSM_Off;
+			}
 		}
-		if (CAP_NUM2VEC_STATUS(in->num, in->vec) != 0
+		if (CAP_NUM2VEC_STATUS(in->num, in->capVec) != 0
 				&& msCounter - in->pressCounter >= cfg->long_press)
 		{
 			out->state = eAOSM_Off;
 		}
 		break;
 	case eAOSM_aOff:
-		if (CAP_FALLING_EDGE(in->num, in->vec))
+		if (CAP_FALLING_EDGE(in->num, in->capVec))
 		{
 			out->state = eAOSM_On;
 			out->counter = msCounter;
 		}
-		if (CAP_NUM2VEC_STATUS(in->num, in->vec) != 0
+		if (CAP_NUM2VEC_STATUS(in->num, in->capVec) != 0
 				&& msCounter - in->pressCounter >= cfg->long_press)
 		{
 			out->state = eAOSM_Off;
@@ -81,7 +90,7 @@ bool AOSM(Button_t *in, uint32_t msCounter, AOSM_CFG_t *cfg, AOSM_Output_t *out)
 		}
 		break;
 	case eAOSM_mOff:
-		if (CAP_FALLING_EDGE(in->num, in->vec))
+		if (CAP_FALLING_EDGE(in->num, in->capVec))
 		{
 			out->state = eAOSM_On;
 			out->counter = msCounter;
@@ -90,7 +99,7 @@ bool AOSM(Button_t *in, uint32_t msCounter, AOSM_CFG_t *cfg, AOSM_Output_t *out)
 		{
 			out->state = eAOSM_Off;
 		}
-		if (CAP_NUM2VEC_STATUS(in->num, in->vec) != 0
+		if (CAP_NUM2VEC_STATUS(in->num, in->capVec) != 0
 				&& msCounter - in->pressCounter >= cfg->long_press)
 		{
 			out->state = eAOSM_Off;
@@ -161,11 +170,18 @@ void ADSM(uint8_t num, uint8_t vec, uint32_t msCounter, ADSM_Cfg_t *cfg, ADSM_Ou
 		// On
 		if (COMM_NUM2VEC_STATE(num, vec) != 0 && COMM_NUM2VEC_CSM(num, vec) == 0)
 		{
-			out->counter = msCounter;
-			out->state = eADSM_nOn;
+			if (cfg->onThresh != 0)
+			{
+				out->counter = msCounter;
+				out->state = eADSM_nOn;
+			}
+			else
+			{
+				out->state = eADSM_On;
+			}
 		}
 		break;
-	case eASDSM_nOn:
+	case eADSM_nOn:
 		// Off or communication breakdown
 		if (COMM_NUM2VEC_STATE(num, vec) == 0 || COMM_NUM2VEC_CSM(num, vec) != 0)
 		{
@@ -186,8 +202,15 @@ void ADSM(uint8_t num, uint8_t vec, uint32_t msCounter, ADSM_Cfg_t *cfg, ADSM_Ou
 		// Off
 		else if (COMM_NUM2VEC_STATE(num, vec) == 0)
 		{
-			out->counter = msCounter;
-			out->state = eADSM_nOff;
+			if (cfg->offThresh != 0)
+			{
+				out->counter = msCounter;
+				out->state = eADSM_nOff;
+			}
+			else
+			{
+				out->state = eADSM_Off;
+			}
 		}
 		break;
 	case eADSM_nOff:
@@ -214,15 +237,19 @@ void ADSM(uint8_t num, uint8_t vec, uint32_t msCounter, ADSM_Cfg_t *cfg, ADSM_Ou
 	switch(out->state)
 	{
 	case eADSM_Off:
+		// clear bit
 		vec &= ~COMM_IDX2VEC_CMD(num);
 		break;
 	case eADSM_nOn:
+		// clear bit
 		vec &= ~COMM_IDX2VEC_CMD(num);
 		break;
 	case eADSM_On:
+		// set bit
 		vec |= COMM_IDX2VEC_CMD(num);
 		break;
 	case eADSM_nOff:
+		// set bit
 		vec |= COMM_IDX2VEC_CMD(num);
 		break;
 	}
