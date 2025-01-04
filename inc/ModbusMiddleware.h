@@ -24,7 +24,10 @@ typedef struct
 	uint16_t buffer[4];
 } MM_Inter_t;
 
+/* Extracts the indexed 2-bit data out of seq (sequence LookUp) */
+/* finds the index within sequence and then shifts a mask to the target sequence */
 #define SEQ_LU(i) ((seq[(i) >> 2U]&(0b11U << ((i) & 0b11U))) >> ((i) & 0b11U))
-#define TO_SEQ(a, b, c, d) ((d << 2*3)|(c << 2*2)|(b << 2*1)|(a))
+/* Formats four x 2-bit items into an octet */
+#define TO_SEQ(a, b, c, d) ((d << 2U*3U)|(c << 2U*2U)|(b << 2U*1U)|(a))
 
 #endif /* INC_MODBUSMIDDLEWARE_H_ */
