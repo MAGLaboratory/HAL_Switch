@@ -63,7 +63,7 @@
 
 #define PETIT_DISCRETE_INPUT PETIT_INTERNAL
 
-#define PETIT_REG PETIT_INTERNAL
+#define PETIT_REG PETIT_EXTERNAL
 
 #define PETIT_INPUT_REG PETIT_INTERNAL
 /*****************************************************************************
@@ -87,6 +87,9 @@
 
 extern void PetitPortDirTx(void);
 extern void PetitPortDirRx(void);
+
+#define PetitPortRegRead(a, b) MMW_READ_REGISTER(a, b)
+#define PetitPortRegWrite(a, b) MMW_WRITE_REGISTER(a, b)
 
 #endif /* INC_PETITMODBUSUSERPORT_H_ */
 

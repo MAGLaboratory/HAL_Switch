@@ -16,56 +16,53 @@ MM_Inter_t mb =
 {0, 1, 0, {0, 0, 0, 0}};
 
 uint8_t seq[] =
-{TO_SEQ( eMMREG_16B,  eMMREG_16B,  eMMREG_16B,  eMMREG_16B)};
+{
+	TO_SEQ(eMMREG_16B, eMMREG_16B, eMMREG_16B, eMMREG_16B),
+	TO_SEQ(eMMREG_32B, eMMREG_16B, eMMREG_32B, eMMREG_16B),
+	TO_SEQ(eMMREG_64B, eMMREG_A64B, eMMREG_32B, eMMREG_16B)
+};
 
 uint16_t reg_a, reg_b, reg_c, reg_d;
+uint32_t reg_e, reg_f;
+uint64_t reg_g;
 
-uint16_t (*real_mb_reg[4]) =
-{&reg_a, &reg_b, &reg_c, &reg_d}
+uint16_t (*real_mb_reg[]) =
+{&reg_a, &reg_b, &reg_c, &reg_d, (uint16_t*)&reg_e, (uint16_t*)&reg_f, (uint16_t*)&reg_g};
 
-uint8_t _mmw_read(uint16_t addr, uint16_t (*buf)[4])
+uint8_t _mmw_read(uint16_t addr, uint16_t buf[4])
 {
-	static uint16_t last_addr = 0;
+	static uint16_t start_addr = (uint16_t)-1U;
 	static uint16_t real_addr = 0;
-	static uint8_t real_seq = SEQ_LU(0);
-	static uint8_t last_seq = SEQ_LU(0);
+	static uint8_t real_seq = eMMREG_16B;
+	static uint8_t cur_seq = eMMREG_16B;
 	static uint16_t read_buf[4] = {0};
+	static bool buffer_invalid = true;
 	/* Increment by one */
 	/* checks the address and whether the buffer is exhausted */
-	if (addr == last_addr + 1U && SEQ_LU(addr) < last_seq)
-	{
-		buf = &read_buf;
-		last_seq = SEQ_LU(addr);
-		last_addr = addr;
-	}
-	else if (addr == last_addr + 1U)
-	{
-		real_seq = SEQ_LU(addr);
-		last_seq = real_seq;
-		buffer_invalid = true;
-	}
-	else if (addr == last_addr)
+	cur_seq = SEQ_LU(addr);
+	if (addr >= start_addr && addr <= start_addr + real_seq && cur_seq < real_seq)
 	{
 		// pass
-		buf = &read_buf;
 	}
 	else
 	{
 		/* Traverse through fake addresses until we find our real address */
 		real_addr = 0;
-		last_seq = SEQ_LU(0);
-		for (uint16_t i = 0; i < addr; i++)
+		cur_seq = SEQ_LU(0);
+		real_seq = SEQ_LU(0);
+		start_addr = 0;
+		for (uint16_t i = 0; i <= addr; i++)
 		{
 			uint8_t my_seq = SEQ_LU(i);
 			/* cross over register boundary */
-			if (my_seq > last_seq)
+			if (my_seq > cur_seq)
 			{
 				real_addr++;
 				real_seq = my_seq;
+				start_addr = i;
 			}
-			last_seq = my_seq;
+			cur_seq = my_seq;
 		}
-		last_addr = addr;
 		buffer_invalid = true;
 	}
 	if (buffer_invalid)
@@ -73,31 +70,34 @@ uint8_t _mmw_read(uint16_t addr, uint16_t (*buf)[4])
 		switch (real_seq)
 		{
 		case eMMREG_16B:
-			buf[0] = *real_mb_reg[real_addr];
+			read_buf[0] = *real_mb_reg[real_addr];
 			break;
 		case eMMREG_32B:
-			buf[0] = (uint32_t)*real_mb_reg[real_addr] & ((1U << 16U) - 1U);
-			buf[1] = (uint32_t)*real_mb_reg[real_addr] >> 16U;
+			read_buf[0] = (uint32_t)*real_mb_reg[real_addr];
+			read_buf[1] = (uint32_t)*real_mb_reg[real_addr] >> 16U;
 			break;
 		case eMMREG_64B:
-			buf[0] = (uint64_t)*real_mb_reg[real_addr] & (1U << 16U) - 1U;
-			buf[1] = (uint64_t)*real_mb_reg[real_addr] >> 16U & (1U << 16U) - 1U;
-			buf[2] = (uint64_t)*real_mb_reg[real_addr] >> 32U & (1U << 16U) - 1U;
-			buf[3] = (uint64_t)*real_mb_reg[real_addr] >> 48U & (1U << 16U) - 1U;
+			read_buf[0] = (uint64_t)*real_mb_reg[real_addr];
+			read_buf[1] = (uint64_t)*real_mb_reg[real_addr] >> 16U;
+			read_buf[2] = (uint64_t)*real_mb_reg[real_addr] >> 32U;
+			read_buf[3] = (uint64_t)*real_mb_reg[real_addr] >> 48U;
 			break;
 		default:
 			// error handling here?
 			break;
 		}
+		buffer_invalid = false;
 	}
-	return last_seq - real_seq;
+	buf = read_buf;
+	return cur_seq;
 }
 
-void _mmw_write(uint16_t addr, uint16_t (*buf)[4])
+void _mmw_write(uint16_t addr, uint16_t buf[4])
 {
 	uint16_t real_addr = 0;
 	uint8_t real_seq = SEQ_LU(0);
 	uint8_t last_seq = SEQ_LU(0);
+	/* Traverse across the sequence list to find real addresses */
 	for (uint16_t i = 0; i < addr; i++)
 	{
 		uint8_t my_seq = SEQ_LU(i);
@@ -109,16 +109,17 @@ void _mmw_write(uint16_t addr, uint16_t (*buf)[4])
 		}
 		last_seq = my_seq;
 	}
+	/* Ugly but portable between endianness */
 	switch (real_seq)
 	{
 	case eMMREG_16B:
-		*real_mb_reg[real_addr] = buf[0];
+		*(real_mb_reg[real_addr]) = buf[0U];
 		break;
 	case eMMREG_32B:
-		*real_mb_reg[real_addr] = buf[0] | buf[1] << 16;
+		*(real_mb_reg[real_addr]) = (uint32_t)buf[0U] | (uint32_t)buf[1U] << 16U;
 		break;
 	case eMMREG_64B:
-		*real_mb_reg[real_addr] = buf[0] | buf[1] << 16 | buf[2] << 32 | buf[3] << 48;
+		*(real_mb_reg[real_addr]) = (uint64_t)buf[0U] | (uint64_t)buf[1U] << 16U | (uint64_t)buf[2U] << 32U | (uint64_t)buf[3U] << 48U;
 		break;
 	default:
 		// error handling code here?
@@ -140,7 +141,7 @@ void _mmw_inval()
 	mb.la_inval = 1;
 }
 
-pu8_t write_register(uint16_t addr, uint16_t data)
+bool MMW_WRITE_REGISTER(uint16_t addr, uint16_t data)
 {
 	// if address is 0, all writes are valid and checking is not needed
 	// does not account for an incorrectly programmed sequence (yet)
@@ -150,8 +151,7 @@ pu8_t write_register(uint16_t addr, uint16_t data)
 		_mmw_start(addr, data);
 		if (mb.targetSeq == 0U)
 		{
-			_mmw_write(addr,
-					&(mb.buffer));
+			_mmw_write(addr, mb.buffer);
 			_mmw_inval();
 		}
 	}
@@ -180,20 +180,19 @@ pu8_t write_register(uint16_t addr, uint16_t data)
 		// last write of sequence
 		if (SEQ_LU(addr) == 0U)
 		{
-			_mmw_write(addr,
-					&(mb.buffer));
+			_mmw_write(addr, mb.buffer);
 			_mmw_inval();
 		}
 	}
 	return 1;
 }
 
-pu8_t read_register(uint16_t addr, uint16_t *data)
+bool MMW_READ_REGISTER(uint16_t addr, uint16_t *data)
 {
-	uint16_t buf;
+	uint16_t *buf = NULL;
 	// mmw read finds the data at the last (biggest) address that is greater than or equal to
 	// the requested address
-	uint8_t offset = _mmw_read(addr, &buf);
+	uint8_t offset = _mmw_read(addr, buf);
 	*data = buf[offset];
 	return 1;
 }
