@@ -26,7 +26,7 @@ typedef struct
 
 /* Extracts the indexed 2-bit data out of seq (sequence LookUp) */
 /* finds the index within sequence and then shifts a mask to the target sequence */
-#define SEQ_LU(i) ((seq[(i) >> 2U]&(0b11U << ((i) & 0b11U))) >> ((i) & 0b11U))
+#define SEQ_LU(i) ((seq[(i) >> 2U]&(0b11U << (((i) & 0b11U) * 2U))) >> (((i) & 0b11U) * 2U))
 /* Formats four x 2-bit items into an octet */
 #define TO_SEQ(a, b, c, d) ((d << 2U*3U)|(c << 2U*2U)|(b << 2U*1U)|(a))
 

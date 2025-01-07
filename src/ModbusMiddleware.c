@@ -55,7 +55,7 @@ uint8_t _mmw_read(uint16_t addr, uint16_t buf[4])
 		{
 			uint8_t my_seq = SEQ_LU(i);
 			/* cross over register boundary */
-			if (my_seq > cur_seq)
+			if (my_seq >= cur_seq)
 			{
 				real_addr++;
 				real_seq = my_seq;
@@ -63,6 +63,8 @@ uint8_t _mmw_read(uint16_t addr, uint16_t buf[4])
 			}
 			cur_seq = my_seq;
 		}
+		/* For loop exit condition compensation */
+		real_addr--;
 		buffer_invalid = true;
 	}
 	if (buffer_invalid)
@@ -73,14 +75,14 @@ uint8_t _mmw_read(uint16_t addr, uint16_t buf[4])
 			read_buf[0] = *real_mb_reg[real_addr];
 			break;
 		case eMMREG_32B:
-			read_buf[0] = (uint32_t)*real_mb_reg[real_addr];
-			read_buf[1] = (uint32_t)*real_mb_reg[real_addr] >> 16U;
+			read_buf[0] = *(uint32_t*)real_mb_reg[real_addr];
+			read_buf[1] = *(uint32_t*)real_mb_reg[real_addr] >> 16U;
 			break;
 		case eMMREG_64B:
-			read_buf[0] = (uint64_t)*real_mb_reg[real_addr];
-			read_buf[1] = (uint64_t)*real_mb_reg[real_addr] >> 16U;
-			read_buf[2] = (uint64_t)*real_mb_reg[real_addr] >> 32U;
-			read_buf[3] = (uint64_t)*real_mb_reg[real_addr] >> 48U;
+			read_buf[0] = *(uint64_t*)real_mb_reg[real_addr];
+			read_buf[1] = *(uint64_t*)real_mb_reg[real_addr] >> 16U;
+			read_buf[2] = *(uint64_t*)real_mb_reg[real_addr] >> 32U;
+			read_buf[3] = *(uint64_t*)real_mb_reg[real_addr] >> 48U;
 			break;
 		default:
 			// error handling here?
@@ -98,17 +100,20 @@ void _mmw_write(uint16_t addr, uint16_t buf[4])
 	uint8_t real_seq = SEQ_LU(0);
 	uint8_t last_seq = SEQ_LU(0);
 	/* Traverse across the sequence list to find real addresses */
-	for (uint16_t i = 0; i < addr; i++)
+	/* Note that this is calculated for each address including zero */
+	for (uint16_t i = 0; i <= addr; i++)
 	{
 		uint8_t my_seq = SEQ_LU(i);
 		/* cross over register boundary */
-		if (my_seq > last_seq)
+		if (my_seq >= last_seq)
 		{
-			real_addr++;
 			real_seq = my_seq;
+			real_addr++;
 		}
 		last_seq = my_seq;
 	}
+	/* one-indexed to zero-indexed addressing compensation */
+	real_addr--;
 	/* Ugly but portable between endianness */
 	switch (real_seq)
 	{
@@ -116,10 +121,10 @@ void _mmw_write(uint16_t addr, uint16_t buf[4])
 		*(real_mb_reg[real_addr]) = buf[0U];
 		break;
 	case eMMREG_32B:
-		*(real_mb_reg[real_addr]) = (uint32_t)buf[0U] | (uint32_t)buf[1U] << 16U;
+		*(uint32_t*)(real_mb_reg[real_addr]) = (uint32_t)buf[0U] | (uint32_t)buf[1U] << 16U;
 		break;
 	case eMMREG_64B:
-		*(real_mb_reg[real_addr]) = (uint64_t)buf[0U] | (uint64_t)buf[1U] << 16U | (uint64_t)buf[2U] << 32U | (uint64_t)buf[3U] << 48U;
+		*(uint64_t*)(real_mb_reg[real_addr]) = (uint64_t)buf[0U] | (uint64_t)buf[1U] << 16U | (uint64_t)buf[2U] << 32U | (uint64_t)buf[3U] << 48U;
 		break;
 	default:
 		// error handling code here?
@@ -157,6 +162,7 @@ bool MMW_WRITE_REGISTER(uint16_t addr, uint16_t data)
 	}
 	else
 	{
+		// previous sequence is 0, we are starting a new sequence
 		if (SEQ_LU(addr - 1U) == 0U)
 		{
 			_mmw_start(addr, data);

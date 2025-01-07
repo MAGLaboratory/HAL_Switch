@@ -22,7 +22,7 @@
 // Petit Modbus RTU Slave Output Register Number
 // Have to put a number of registers here
 // It has to be bigger than 0 (zero)!!
-#define NUMBER_OF_PETITREGISTERS                 		( 3 )
+#define NUMBER_OF_PETITREGISTERS                 		( 12 )
 #define NUMBER_OF_INPUT_PETITREGISTERS 					( 1 )
 
 #define NUMBER_OF_REGISTERS_IN_BUFFER                   ( 5 )
