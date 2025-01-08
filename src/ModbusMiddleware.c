@@ -29,7 +29,7 @@ uint64_t reg_g;
 uint16_t (*real_mb_reg[]) =
 {&reg_a, &reg_b, &reg_c, &reg_d, (uint16_t*)&reg_e, (uint16_t*)&reg_f, (uint16_t*)&reg_g};
 
-uint8_t _mmw_read(uint16_t addr, uint16_t buf[4])
+uint8_t _mmw_read(uint16_t addr, uint16_t (*buf[4]))
 {
 	static uint16_t start_addr = (uint16_t)-1U;
 	static uint16_t real_addr = 0;
@@ -90,7 +90,7 @@ uint8_t _mmw_read(uint16_t addr, uint16_t buf[4])
 		}
 		buffer_invalid = false;
 	}
-	buf = read_buf;
+	*buf = &read_buf;
 	return cur_seq;
 }
 
@@ -198,7 +198,7 @@ bool MMW_READ_REGISTER(uint16_t addr, uint16_t *data)
 	uint16_t *buf = NULL;
 	// mmw read finds the data at the last (biggest) address that is greater than or equal to
 	// the requested address
-	uint8_t offset = _mmw_read(addr, buf);
+	uint8_t offset = _mmw_read(addr, &buf);
 	*data = buf[offset];
 	return 1;
 }
