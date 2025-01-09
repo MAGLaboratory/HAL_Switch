@@ -24,6 +24,23 @@ typedef struct
 	uint16_t buffer[4];
 } MM_Inter_t;
 
+start_addr
+real_addr
+real_seq
+cur_seq
+buf
+buf_inval
+
+typedef struct
+{
+	uint16_t start_addr;
+	uint16_t real_addr;
+	uint8_t real_seq: 2;
+	uint8_t cur_seq: 2;
+	uint8_t buffer_invalid: 1;
+	uint16_t read_buf[4];
+} MM_Read_t;
+
 /* Extracts the indexed 2-bit data out of seq (sequence LookUp) */
 /* finds the index within sequence and then shifts a mask to the target sequence */
 #define SEQ_LU(i) ((seq[(i) >> 2U]&(0b11U << (((i) & 0b11U) * 2U))) >> (((i) & 0b11U) * 2U))

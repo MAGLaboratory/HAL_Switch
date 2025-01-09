@@ -12,10 +12,10 @@
  * Reads retrieve the register and 
  */
 
-MM_Inter_t mb =
+static MM_Inter_t mb =
 {0, 1, 0, {0, 0, 0, 0}};
 
-uint8_t seq[] =
+static const uint8_t seq[] =
 {
 	TO_SEQ(eMMREG_16B, eMMREG_16B, eMMREG_16B, eMMREG_16B),
 	TO_SEQ(eMMREG_32B, eMMREG_16B, eMMREG_32B, eMMREG_16B),
@@ -26,105 +26,127 @@ uint16_t reg_a, reg_b, reg_c, reg_d;
 uint32_t reg_e, reg_f;
 uint64_t reg_g;
 
-uint16_t (*real_mb_reg[]) =
+const uint16_t (*real_mb_reg[]) =
 {&reg_a, &reg_b, &reg_c, &reg_d, (uint16_t*)&reg_e, (uint16_t*)&reg_f, (uint16_t*)&reg_g};
+
+static MM_Read_t mb_r;
+
+void MMW_INIT()
+{
+	mb_r.start_addr = -1U;
+	mb_r.real_addr = 0U;
+	mb_r.real_seq = SEQ_LU(0);
+	mb_r.cur_seq = SEQ_LU(0);
+	mb_r.buffer_invalid = true;
+	mb_r.read_buf[0] = 0;
+	mb_r.read_buf[1] = 0;
+	mb_r.read_buf[2] = 0;
+	mb_r.read_buf[3] = 0;
+}
 
 uint8_t _mmw_read(uint16_t addr, uint16_t (*buf[4]))
 {
-	static uint16_t start_addr = (uint16_t)-1U;
-	static uint16_t real_addr = 0;
-	static uint8_t real_seq = eMMREG_16B;
-	static uint8_t cur_seq = eMMREG_16B;
-	static uint16_t read_buf[4] = {0};
-	static bool buffer_invalid = true;
+	/* Read structure mb_r initialized in init function */
+	
 	/* Increment by one */
 	/* checks the address and whether the buffer is exhausted */
 	cur_seq = SEQ_LU(addr);
-	if (addr >= start_addr && addr <= start_addr + real_seq && cur_seq < real_seq)
+	if (addr >= mb_r.start_addr && 
+		addr <= mb_r.start_addr + mb_r.real_seq && 
+		mb_r.cur_seq < mb_r.real_seq)
 	{
 		// pass
 	}
 	else
 	{
 		/* Traverse through fake addresses until we find our real address */
-		real_addr = 0;
-		cur_seq = SEQ_LU(0);
-		real_seq = SEQ_LU(0);
-		start_addr = 0;
+		mb_r.real_addr = 0;
+		mb_r.cur_seq = SEQ_LU(0);
+		mb_r.real_seq = SEQ_LU(0);
+		mb_r.start_addr = 0;
 		for (uint16_t i = 0; i <= addr; i++)
 		{
 			uint8_t my_seq = SEQ_LU(i);
 			/* cross over register boundary */
-			if (my_seq >= cur_seq)
+			if (my_seq >= mb_r.cur_seq)
 			{
-				real_addr++;
-				real_seq = my_seq;
-				start_addr = i;
+				mb_r.real_addr++;
+				mb_r.real_seq = my_seq;
+				mb_r.start_addr = i;
 			}
-			cur_seq = my_seq;
+			mb_r.cur_seq = my_seq;
 		}
 		/* For loop exit condition compensation */
-		real_addr--;
-		buffer_invalid = true;
+		mb_r.real_addr--;
+		mb_r.buffer_invalid = true;
 	}
-	if (buffer_invalid)
+	/* 
+	 * The real mb register list actually contains pointers to registers
+	 * larger than uint16_t, so we use the correct cast for those registers
+	 * when extracting them into the read buffer.  
+	 */
+	if (mb_r.buffer_invalid)
 	{
-		switch (real_seq)
+		switch (mb_r.real_seq)
 		{
 		case eMMREG_16B:
-			read_buf[0] = *real_mb_reg[real_addr];
+			mb_r.read_buf[0] = *real_mb_reg[real_addr];
 			break;
 		case eMMREG_32B:
-			read_buf[0] = *(uint32_t*)real_mb_reg[real_addr];
-			read_buf[1] = *(uint32_t*)real_mb_reg[real_addr] >> 16U;
+			mb_r.read_buf[0] = *(uint32_t*)real_mb_reg[real_addr];
+			mb_r.read_buf[1] = *(uint32_t*)real_mb_reg[real_addr] >> 16U;
 			break;
 		case eMMREG_64B:
-			read_buf[0] = *(uint64_t*)real_mb_reg[real_addr];
-			read_buf[1] = *(uint64_t*)real_mb_reg[real_addr] >> 16U;
-			read_buf[2] = *(uint64_t*)real_mb_reg[real_addr] >> 32U;
-			read_buf[3] = *(uint64_t*)real_mb_reg[real_addr] >> 48U;
+			mb_r.read_buf[0] = *(uint64_t*)real_mb_reg[real_addr];
+			mb_r.read_buf[1] = *(uint64_t*)real_mb_reg[real_addr] >> 16U;
+			mb_r.read_buf[2] = *(uint64_t*)real_mb_reg[real_addr] >> 32U;
+			mb_r.read_buf[3] = *(uint64_t*)real_mb_reg[real_addr] >> 48U;
 			break;
 		default:
-			// error handling here?
+			// error handling here
 			break;
 		}
-		buffer_invalid = false;
+		mb_r.buffer_invalid = false;
 	}
-	*buf = &read_buf;
-	return cur_seq;
+	*buf = &mb_r.read_buf;
+	return mb_r.cur_seq;
 }
 
 void _mmw_write(uint16_t addr, uint16_t buf[4])
 {
-	uint16_t real_addr = 0;
-	uint8_t real_seq = SEQ_LU(0);
-	uint8_t last_seq = SEQ_LU(0);
+	struct
+	{
+		uint16_t real_addr;
+		uint8_t real_seq: 2;
+		uint8_t last_seq: 2;
+		uint8_t my_seq: 2;
+	} work = {0, SEQ_LU(0), SEQ_LU(0), SEQ_LU(0)};
 	/* Traverse across the sequence list to find real addresses */
 	/* Note that this is calculated for each address including zero */
 	for (uint16_t i = 0; i <= addr; i++)
 	{
-		uint8_t my_seq = SEQ_LU(i);
+		work.my_seq = SEQ_LU(i);
 		/* cross over register boundary */
-		if (my_seq >= last_seq)
+		if (work.my_seq >= work.last_seq)
 		{
-			real_seq = my_seq;
-			real_addr++;
+			work.real_seq = my_seq;
+			work.real_addr++;
 		}
-		last_seq = my_seq;
+		work.last_seq = work.my_seq;
 	}
 	/* one-indexed to zero-indexed addressing compensation */
-	real_addr--;
+	work.real_addr--;
 	/* Ugly but portable between endianness */
-	switch (real_seq)
+	switch (work.real_seq)
 	{
 	case eMMREG_16B:
-		*(real_mb_reg[real_addr]) = buf[0U];
+		*(real_mb_reg[work.real_addr]) = buf[0U];
 		break;
 	case eMMREG_32B:
-		*(uint32_t*)(real_mb_reg[real_addr]) = (uint32_t)buf[0U] | (uint32_t)buf[1U] << 16U;
+		*(uint32_t*)(real_mb_reg[work.real_addr]) = (uint32_t)buf[0U] | (uint32_t)buf[1U] << 16U;
 		break;
 	case eMMREG_64B:
-		*(uint64_t*)(real_mb_reg[real_addr]) = (uint64_t)buf[0U] | (uint64_t)buf[1U] << 16U | (uint64_t)buf[2U] << 32U | (uint64_t)buf[3U] << 48U;
+		*(uint64_t*)(real_mb_reg[work.real_addr]) = (uint64_t)buf[0U] | (uint64_t)buf[1U] << 16U | (uint64_t)buf[2U] << 32U | (uint64_t)buf[3U] << 48U;
 		break;
 	default:
 		// error handling code here?
