@@ -31,7 +31,7 @@ uint16_t (*const real_mb_reg[]) =
 
 static MM_Read_t mb_r;
 
-void MMW_INIT()
+void MMW_Init()
 {
 	mb_r.start_addr = (uint16_t)-1U;
 	mb_r.real_addr = 0U;
@@ -56,18 +56,16 @@ void MMW_INIT()
  * buf - output
  * return: address within the output buffer to read for the specified address
  */
-uint8_t _mmw_read(uint16_t addr, uint16_t (*buf[4]))
+uint8_t _mmw_read(uint16_t addr, const uint16_t **const buf)
 {
 	/* Read structure mb_r initialized in init function */
-	
-	/* Increment by one */
-	/* checks the address and whether the buffer is exhausted */
+	/* checks the address and whether the buffer is correct */
 	mb_r.cur_seq = SEQ_LU(addr);
 	if (addr >= mb_r.start_addr && 
 		addr <= mb_r.start_addr + mb_r.real_seq && 
 		mb_r.cur_seq < mb_r.real_seq)
 	{
-		// pass
+		/* Pass.  The buffer is up-to-date.  */
 	}
 	else
 	{
@@ -79,7 +77,7 @@ uint8_t _mmw_read(uint16_t addr, uint16_t (*buf[4]))
 		for (uint16_t i = 0; i <= addr; i++)
 		{
 			uint8_t my_seq = SEQ_LU(i);
-			/* cross over register boundary */
+			/* cross over real register boundary */
 			if (my_seq >= mb_r.cur_seq)
 			{
 				mb_r.real_addr++;
@@ -120,7 +118,7 @@ uint8_t _mmw_read(uint16_t addr, uint16_t (*buf[4]))
 		}
 		mb_r.buffer_invalid = false;
 	}
-	*buf = &mb_r.read_buf;
+	(*buf) = mb_r.read_buf;
 	return mb_r.cur_seq;
 }
 
@@ -180,7 +178,7 @@ void _mmw_inval()
 	mb.la_inval = 1;
 }
 
-bool MMW_WRITE_REGISTER(uint16_t addr, uint16_t data)
+bool MMW_Write_Register(uint16_t addr, uint16_t data)
 {
 	// if address is 0, all writes are valid and checking is not needed
 	// does not account for an incorrectly programmed sequence (yet)
@@ -227,9 +225,9 @@ bool MMW_WRITE_REGISTER(uint16_t addr, uint16_t data)
 	return 1;
 }
 
-bool MMW_READ_REGISTER(uint16_t addr, uint16_t *data)
+bool MMW_Read_Register(uint16_t addr, uint16_t *const data)
 {
-	uint16_t *buf = NULL;
+	const uint16_t *buf = NULL;
 	// mmw read finds the data at the last (biggest) address that is greater than or equal to
 	// the requested address
 	uint8_t offset = _mmw_read(addr, &buf);

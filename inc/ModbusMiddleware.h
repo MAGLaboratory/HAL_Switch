@@ -8,6 +8,7 @@
 #ifndef INC_MODBUSMIDDLEWARE_H_
 #define INC_MODBUSMIDDLEWARE_H_
 #include <stdint.h>
+#include <stdbool.h>
 typedef enum
 {
 	eMMREG_16B = 0,
@@ -39,5 +40,9 @@ typedef struct
 #define SEQ_LU(i) ((seq[(i) >> 2U]&(0b11U << (((i) & 0b11U) * 2U))) >> (((i) & 0b11U) * 2U))
 /* Formats four x 2-bit items into an octet */
 #define TO_SEQ(a, b, c, d) ((d << 2U*3U)|(c << 2U*2U)|(b << 2U*1U)|(a))
+
+void MMW_Init(void);
+bool MMW_Write_Register(uint16_t addr, uint16_t data);
+bool MMW_Read_Register(uint16_t addr, uint16_t *const data);
 
 #endif /* INC_MODBUSMIDDLEWARE_H_ */

@@ -57,7 +57,7 @@
 // PETIT_CRC_BITWISE takes up cycles but is space efficient
 // PETIT_CRC_EXTERNAL requires you to define PetitPortCRC16Calc.
 //     it is possible to use hardware CRC calculation with this.
-#define PETIT_CRC PETIT_CRC_TABULAR
+#define C_PETIT_CRC PETIT_CRC_TABULAR
 
 #define PETIT_COIL PETIT_INTERNAL
 
@@ -88,8 +88,8 @@
 extern void PetitPortDirTx(void);
 extern void PetitPortDirRx(void);
 
-#define PetitPortRegRead(a, b) MMW_READ_REGISTER(a, b)
-#define PetitPortRegWrite(a, b) MMW_WRITE_REGISTER(a, b)
+#define PetitPortRegRead(a, b) MMW_Read_Register(a, b)
+#define PetitPortRegWrite(a, b) MMW_Write_Register(a, b)
 
 #endif /* INC_PETITMODBUSUSERPORT_H_ */
 

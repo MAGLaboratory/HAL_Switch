@@ -9,6 +9,7 @@
 #include "kiricapsense.h"
 #include "PetitModbusPort.h"
 #include "PetitModbus.h"
+#include "ModbusMiddleware.h"
 #include "hal-config.h"
 #include "input.h"
 #include "output.h"
@@ -302,7 +303,7 @@ int main(void)
 	CHIP_Init();
 
 	/* modbus middleware init */
-	MMW_INIT();
+	MMW_Init();
 
 	/* Set interrupt priority to let systick preempt */
 	for (uint8_t i = 0; i < 21; i++)
@@ -343,7 +344,7 @@ int main(void)
 		{
 			lastCounter += 1u;
 
-			ProcessPetitModbus();
+			PETIT_MODBUS_Process();
 			KIRICAPSENSE_process();
 
 			// button calculation
