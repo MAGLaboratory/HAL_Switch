@@ -24,13 +24,6 @@ typedef struct
 	uint16_t buffer[4];
 } MM_Inter_t;
 
-start_addr
-real_addr
-real_seq
-cur_seq
-buf
-buf_inval
-
 typedef struct
 {
 	uint16_t start_addr;

@@ -26,14 +26,14 @@ uint16_t reg_a, reg_b, reg_c, reg_d;
 uint32_t reg_e, reg_f;
 uint64_t reg_g;
 
-const uint16_t (*real_mb_reg[]) =
+uint16_t (*const real_mb_reg[]) =
 {&reg_a, &reg_b, &reg_c, &reg_d, (uint16_t*)&reg_e, (uint16_t*)&reg_f, (uint16_t*)&reg_g};
 
 static MM_Read_t mb_r;
 
 void MMW_INIT()
 {
-	mb_r.start_addr = -1U;
+	mb_r.start_addr = (uint16_t)-1U;
 	mb_r.real_addr = 0U;
 	mb_r.real_seq = SEQ_LU(0);
 	mb_r.cur_seq = SEQ_LU(0);
@@ -44,13 +44,25 @@ void MMW_INIT()
 	mb_r.read_buf[3] = 0;
 }
 
+/*
+ * Modbus middleware read function
+ *
+ * This function takes an input address and reads it to the buffer.  It has a
+ * cache for the previously read address, so it is possible to take a
+ * "snapshot" of the value at that address while reading out each 16-bit
+ * subdivision sequentially.
+ *
+ * addr - input
+ * buf - output
+ * return: address within the output buffer to read for the specified address
+ */
 uint8_t _mmw_read(uint16_t addr, uint16_t (*buf[4]))
 {
 	/* Read structure mb_r initialized in init function */
 	
 	/* Increment by one */
 	/* checks the address and whether the buffer is exhausted */
-	cur_seq = SEQ_LU(addr);
+	mb_r.cur_seq = SEQ_LU(addr);
 	if (addr >= mb_r.start_addr && 
 		addr <= mb_r.start_addr + mb_r.real_seq && 
 		mb_r.cur_seq < mb_r.real_seq)
@@ -90,17 +102,17 @@ uint8_t _mmw_read(uint16_t addr, uint16_t (*buf[4]))
 		switch (mb_r.real_seq)
 		{
 		case eMMREG_16B:
-			mb_r.read_buf[0] = *real_mb_reg[real_addr];
+			mb_r.read_buf[0] = *real_mb_reg[mb_r.real_addr];
 			break;
 		case eMMREG_32B:
-			mb_r.read_buf[0] = *(uint32_t*)real_mb_reg[real_addr];
-			mb_r.read_buf[1] = *(uint32_t*)real_mb_reg[real_addr] >> 16U;
+			mb_r.read_buf[0] = *(uint32_t*)real_mb_reg[mb_r.real_addr];
+			mb_r.read_buf[1] = *(uint32_t*)real_mb_reg[mb_r.real_addr] >> 16U;
 			break;
 		case eMMREG_64B:
-			mb_r.read_buf[0] = *(uint64_t*)real_mb_reg[real_addr];
-			mb_r.read_buf[1] = *(uint64_t*)real_mb_reg[real_addr] >> 16U;
-			mb_r.read_buf[2] = *(uint64_t*)real_mb_reg[real_addr] >> 32U;
-			mb_r.read_buf[3] = *(uint64_t*)real_mb_reg[real_addr] >> 48U;
+			mb_r.read_buf[0] = *(uint64_t*)real_mb_reg[mb_r.real_addr];
+			mb_r.read_buf[1] = *(uint64_t*)real_mb_reg[mb_r.real_addr] >> 16U;
+			mb_r.read_buf[2] = *(uint64_t*)real_mb_reg[mb_r.real_addr] >> 32U;
+			mb_r.read_buf[3] = *(uint64_t*)real_mb_reg[mb_r.real_addr] >> 48U;
 			break;
 		default:
 			// error handling here
@@ -129,7 +141,7 @@ void _mmw_write(uint16_t addr, uint16_t buf[4])
 		/* cross over register boundary */
 		if (work.my_seq >= work.last_seq)
 		{
-			work.real_seq = my_seq;
+			work.real_seq = work.my_seq;
 			work.real_addr++;
 		}
 		work.last_seq = work.my_seq;
