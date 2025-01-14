@@ -77,14 +77,14 @@ typedef struct
 	uint32_t on_time;
 	uint32_t aoff_time;
 	uint32_t moff_time;
-} AOSM_CFG_t;
+} T_AOSM_CFG;
 
 typedef struct
 {
 	AOSM_State_t state;
 	AOSM_State_t lastState;
 	uint32_t counter;
-} AOSM_Output_t;
+} T_AOSM_OUTPUT;
 
 #define C_AOSM_LONG_PRESS (1000UL)
 #define C_AOSM_ON_TIMER (1000UL * 60UL)
@@ -93,7 +93,7 @@ typedef struct
 
 /* Auto Off State Machine */
 bool AOSM(AOSM_Input_t *in, uint32_t msCounter,
-		AOSM_CFG_t *cfg, AOSM_Output_t *out);
+		T_AOSM_CFG *cfg, T_AOSM_OUTPUT *out);
 
 #define C_COMM_THRESH (1000U*60U)
 
@@ -111,18 +111,18 @@ typedef struct
 {
 	ADSM_State_t state;
 	uint32_t counter;
-} ADSM_Output_t;
+} T_ADSM_OUTPUT;
 
 typedef struct
 {
 	uint32_t onThresh;
 	uint32_t offThresh;
-} ADSM_Cfg_t;
+} T_ADSM_CFG;
 
 #define C_ADSM_ONE_MIN (60U * 1000U)
 #define C_ADSM_FIFTEEN_MINS (15U * 60U * 1000U)
 
-void ADSM(uint8_t num, uint8_t vec, uint32_t msCounter, ADSM_Cfg_t *cfg, ADSM_Output_t *out);
+void ADSM(uint8_t num, uint8_t vec, uint32_t msCounter, T_ADSM_CFG *cfg, T_ADSM_OUTPUT *out);
 
 typedef enum
 {
@@ -139,6 +139,6 @@ typedef enum
 	eCON_CMD_OVR,
 	eCON_CMD_MOT,
 	eCON_CMD_LIT
-} Control_State_t;
+} T_CONTROL_STATE;
 
 #endif /* INC_INPUT_H_ */

@@ -122,29 +122,29 @@ typedef struct
 	uint16_t r :4;
 	uint16_t g :4;
 	uint16_t b :4;
-} LED_Color_t;
+} T_LED_COLOR;
 
 typedef struct
 {
-	LED_Color_t color;
+	T_LED_COLOR color;
 	uint16_t duration;
-} LED_Blink_t;
+} T_LED_BLINK;
 
 typedef struct
 {
 	uint8_t state: 1;
 	uint32_t blinkCounter;
 	uint16_t duration;
-	const LED_Blink_t *lastPri;
-	const LED_Blink_t *lastSec;
-} BlinkSel_Output_t;
+	const T_LED_BLINK *lastPri;
+	const T_LED_BLINK *lastSec;
+} T_BLINK_SEL_OUTPUT;
 
 /* blink code */
-LED_Color_t blink_sel(uint32_t msCounter, const LED_Blink_t *pri,
-		const LED_Blink_t *sec, BlinkSel_Output_t *out);
+T_LED_COLOR blink_sel(uint32_t msCounter, const T_LED_BLINK *pri,
+		const T_LED_BLINK *sec, T_BLINK_SEL_OUTPUT *out);
 
 /* soft pwm code */
-void led_pwm_out(uint8_t num, uint32_t msCounter, LED_Color_t color);
+void led_pwm_out(uint8_t num, uint32_t msCounter, T_LED_COLOR color);
 
 typedef enum
 {
@@ -152,16 +152,16 @@ typedef enum
 	eRelaySMOnFull,
 	eRelaySMOnReduced,
 	eRelaySMOnFullReseat
-} RelaySMStateType;
+} T_RELAY_SM_STATE;
 
 typedef struct
 {
 	uint32_t cas; /*< count at start */
-	RelaySMStateType state;
-} RelaySMOutputType;
+	T_RELAY_SM_STATE state;
+} T_RELAY_SM_OUTPUT;
 
 void RelaySM(uint8_t relayNum, uint8_t relayVec, uint32_t msCounter,
-		RelaySMOutputType* out);
+		T_RELAY_SM_OUTPUT* out);
 
 
 /*
@@ -183,15 +183,15 @@ typedef struct
 {
 	uint32_t onPeriod;
 	uint32_t offPeriod;
-}SDSUSMCfg_t;
+}T_SDSUSM_CFG;
 
 typedef struct
 {
 	uint32_t lastCounter;
 	SDSUSMState_t State;
-}SDSUSMOutput_t;
+}T_SDSUSM_OUTPUT;
 
-bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMCfg_t* cfg,
-		SDSUSMOutput_t* Out);
+bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, T_SDSUSM_CFG* cfg,
+		T_SDSUSM_OUTPUT* Out);
 
 #endif /* INC_OUTPUT_H_ */

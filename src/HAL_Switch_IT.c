@@ -16,6 +16,7 @@
 volatile bool systick_fault_mode = false;
 extern volatile uint32_t msCounter;
 volatile uint32_t msTicks = 0;
+extern T_PETIT_MODBUS Petit;
 
 void TIMER0_IRQHandler(void)
 {
@@ -40,7 +41,7 @@ void SysTick_Handler(void)
 		PetitPortTimerStop();
 
 		// clear the modbus receiver
-		PetitRxBufferReset();
+		PetitRxBufferReset(&Petit);
 
 		PetitPortDirRx();
 	}
@@ -77,14 +78,14 @@ void Fault_Handler(void)
 void USART1_RX_IRQHandler(void)
 {
 	USART_IntClear(USART1, USART_IF_RXDATAV);
-	PetitRxBufferInsert(USART1->RXDATA);
+	PetitRxBufferInsert(&Petit, USART1->RXDATA);
 }
 
 void USART1_TX_IRQHandler(void)
 {
 	pu8_t res;
 	USART_IntClear(USART1, USART_IF_TXC);
-	if (PetitTxBufferPop(&res))
+	if (PetitTxBufferPop(&Petit, &res))
 	{
 		USART1->TXDATA = res;
 	}

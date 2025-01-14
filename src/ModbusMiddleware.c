@@ -222,7 +222,7 @@ bool MMW_Write_Register(uint16_t addr, uint16_t data)
 			_mmw_inval();
 		}
 	}
-	return 1;
+	return 1U;
 }
 
 bool MMW_Read_Register(uint16_t addr, uint16_t *const data)
@@ -232,5 +232,5 @@ bool MMW_Read_Register(uint16_t addr, uint16_t *const data)
 	// the requested address
 	uint8_t offset = _mmw_read(addr, &buf);
 	*data = buf[offset];
-	return 1;
+	return 1U;
 }

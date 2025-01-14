@@ -59,8 +59,8 @@ void LED_Write(uint8_t led, LEDchanType chan, uint8_t state)
 	}
 }
 
-LED_Color_t blink_sel(uint32_t msCounter, const LED_Blink_t *pri,
-		const LED_Blink_t *sec, BlinkSel_Output_t *out)
+T_LED_COLOR blink_sel(uint32_t msCounter, const T_LED_BLINK *pri,
+		const T_LED_BLINK *sec, T_BLINK_SEL_OUTPUT *out)
 {
 	if (pri != out->lastPri || sec != out->lastSec)
 	{
@@ -96,7 +96,7 @@ LED_Color_t blink_sel(uint32_t msCounter, const LED_Blink_t *pri,
 	}
 }
 
-void led_pwm_out(uint8_t num, uint32_t msCounter, LED_Color_t color)
+void led_pwm_out(uint8_t num, uint32_t msCounter, T_LED_COLOR color)
 {
 	uint8_t counter = msCounter & ((1U << 3U) - 1U);
 	if (counter >= color.r)
@@ -131,7 +131,7 @@ void RelaySM(
 	uint8_t relayNum,
 	uint8_t relayVec,
 	uint32_t msCounter,
-	RelaySMOutputType* out
+	T_RELAY_SM_OUTPUT* out
 )
 {
 	EFM_ASSERT(relayNum < 2u);
@@ -200,7 +200,7 @@ void RelaySM(
 // note: the output struct tick counter is not initialized by this state
 // machine and should be initialized to zero.
 // if the struct is a global variable, it should be zeroed by default
-bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, SDSUSMCfg_t *cfg, SDSUSMOutput_t *Out)
+bool SDSUSM(uint8_t num, uint8_t vec, uint32_t Counter, T_SDSUSM_CFG *cfg, T_SDSUSM_OUTPUT *Out)
 {
 	bool retval = false;
 	// transitions

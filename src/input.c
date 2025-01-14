@@ -31,7 +31,7 @@ uint8_t DebounceSM(uint8_t input, uint8_t debounceThreshold, DSMOutputType* out)
 }
 
 bool AOSM(AOSM_Input_t *in, uint32_t msCounter,
-		AOSM_CFG_t *cfg, AOSM_Output_t *out)
+		T_AOSM_CFG *cfg, T_AOSM_OUTPUT *out)
 {
 	bool onOff = false;
 
@@ -162,7 +162,7 @@ void CommSM(uint8_t num, uint8_t vec, uint32_t msCounter, uint32_t thresh, uint3
 
 // the advanced debounce state machine depends on the communication state machine
 // note: the CSM flag is the status bit of the communication state machine
-void ADSM(uint8_t num, uint8_t vec, uint32_t msCounter, ADSM_Cfg_t *cfg, ADSM_Output_t *out)
+void ADSM(uint8_t num, uint8_t vec, uint32_t msCounter, T_ADSM_CFG *cfg, T_ADSM_OUTPUT *out)
 {
 	switch(out->state)
 	{

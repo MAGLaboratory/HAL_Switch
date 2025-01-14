@@ -18,7 +18,7 @@
  * Defines here
  *****************************************************************************/
 
-const LED_Blink_t LED_States[eLS_NUM_STATES][2] __attribute__((section(".text.consts")))=
+const T_LED_BLINK LED_States[eLS_NUM_STATES][2] __attribute__((section(".text.consts")))=
 {
 	{{{0U, 0U, 0U}, 100U}, C_LED_ZERO_STATE}, // off
 	{{{6U, 6U, 0U}, 500U}, C_LED_BLINK_STATE}, // WB on
@@ -158,40 +158,42 @@ uint8_t commVec = 0;
 uint8_t relayVec = 0;
 uint32_t pressTS[2];
 
-RelaySMOutputType WS_Relay[2];
+T_RELAY_SM_OUTPUT WS_Relay[2];
 
-SDSUSMCfg_t CF_SDSU[2] =
+T_SDSUSM_CFG CF_SDSU[2] =
 {{C_SDSU_DEF_HID_ON_PERIOD, C_SDSU_DEF_HID_OFF_PERIOD},
 { 0, 0 }};
-SDSUSMOutput_t WS_SDSU[2];
+T_SDSUSM_OUTPUT WS_SDSU[2];
 
-AOSM_CFG_t CF_AOSM[2] =
+T_AOSM_CFG CF_AOSM[2] =
 {{C_AOSM_LONG_PRESS, C_AOSM_ON_TIMER, C_AOSM_OFF_TIMER, C_AOSM_MOFF_TIMER},
 {C_AOSM_LONG_PRESS, 0, 0, 0}};
-AOSM_Output_t WS_AOSM[2];
+T_AOSM_OUTPUT WS_AOSM[2];
 
 bool simpleDisplay = false;
 // no struct for communication state machine
 uint32_t CSM_Counter[2];
 
-ADSM_Cfg_t CF_ADSM[eADSM_CFG_S_NUM] =
+T_ADSM_CFG CF_ADSM[eADSM_CFG_S_NUM] =
 {
 	{0, 0},
 	{C_ADSM_ONE_MIN, C_ADSM_ONE_MIN},
 	{C_ADSM_FIFTEEN_MINS, C_ADSM_FIFTEEN_MINS}
 };
 
-ADSM_Cfg_t *pCF_ADSM[2] = {&CF_ADSM[0], &CF_ADSM[0]};
-ADSM_Output_t WS_ADSM[2];
+T_ADSM_CFG *pCF_ADSM[2] = {&CF_ADSM[0], &CF_ADSM[0]};
+T_ADSM_OUTPUT WS_ADSM[2];
 
-Control_State_t WS_Control[2];
-Control_State_t last_WS_Control[2];
+T_CONTROL_STATE WS_Control[2];
+T_CONTROL_STATE last_WS_Control[2];
 
-const LED_Blink_t (*pLED_Blink_States[2][4])[2] =
+const T_LED_BLINK (*pLED_Blink_States[2][4])[2] =
 {{&LED_States[eLS_Off], &LED_States[eLS_aOn], &LED_States[eLS_aOff], &LED_States[eLS_On]},
 {&LED_States[eLS_Off], &LED_States[eLS_aOn], &LED_States[eLS_aOff], &LED_States[eLS_On]}};
 
-BlinkSel_Output_t led_bs[2];
+T_BLINK_SEL_OUTPUT led_bs[2];
+
+T_PETIT_MODBUS Petit;
 
 void cap2cmd(uint8_t i)
 {
@@ -302,9 +304,6 @@ int main(void)
 	/* Chip errata */
 	CHIP_Init();
 
-	/* modbus middleware init */
-	MMW_Init();
-
 	/* Set interrupt priority to let systick preempt */
 	for (uint8_t i = 0; i < 21; i++)
 	{
@@ -315,6 +314,14 @@ int main(void)
 	CMU_ClockEnable(cmuClock_HFPER, true);
 
 	GPIO_Init();
+
+	/* modbus middleware init */
+	MMW_Init();
+
+	PETIT_MODBUS_Init(&Petit);
+	Petit.Tx_Begin = PetitPortTxBegin;
+	Petit.Timer_Start = PetitPortTimerStart;
+	Petit.Timer_Stop = PetitPortTimerStop;
 
 	UART_Init();
 
@@ -344,7 +351,7 @@ int main(void)
 		{
 			lastCounter += 1u;
 
-			PETIT_MODBUS_Process();
+			PETIT_MODBUS_Process(&Petit);
 			KIRICAPSENSE_process();
 
 			// button calculation
@@ -482,10 +489,10 @@ int main(void)
 			// LED output
 			for (uint8_t i = 0; i < KCS_NUM_CHANNELS; i++)
 			{
-				const LED_Blink_t (*currentBlink)[2] =
+				const T_LED_BLINK (*currentBlink)[2] =
 						pLED_Blink_States[i][ledEnumCalc(i, relayVec, simpleDisplay)];
 
-				LED_Color_t normalColor = blink_sel(msCounter,
+				T_LED_COLOR normalColor = blink_sel(msCounter,
 						&((*currentBlink)[0]), &((*currentBlink)[1]),
 						&led_bs[i]);
 
