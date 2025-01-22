@@ -12,9 +12,7 @@
  * Reads retrieve the register and 
  */
 
-static MM_Inter_t mb =
-{0, 1, 0, {0, 0, 0, 0}};
-
+/* The sequence, registers, and register reference definitions */
 static const uint8_t seq[] =
 {
 	TO_SEQ(eMMREG_16B, eMMREG_16B, eMMREG_16B, eMMREG_16B),
@@ -22,26 +20,38 @@ static const uint8_t seq[] =
 	TO_SEQ(eMMREG_64B, eMMREG_A64B, eMMREG_32B, eMMREG_16B)
 };
 
-uint16_t reg_a, reg_b, reg_c, reg_d;
-uint32_t reg_e, reg_f;
-uint64_t reg_g;
+static uint16_t reg_a, reg_b, reg_c, reg_d;
+static uint32_t reg_e, reg_f;
+static uint64_t reg_g;
 
-uint16_t (*const real_mb_reg[]) =
+static uint16_t (*const real_mb_reg[]) =
 {&reg_a, &reg_b, &reg_c, &reg_d, (uint16_t*)&reg_e, (uint16_t*)&reg_f, (uint16_t*)&reg_g};
 
-static MM_Read_t mb_r;
+#if MMW_STRUCT_TYPE == MMW_STRUCT_STATIC
+static T_MMW_Data mb_d = {seq, real_mb_reg};
+static T_MMW_Read mb_r;
+static T_MMW_Write mb_w;
+#endif /* MMW_STRUCT_TYPE == MMW_STRUCT_STATIC */
 
-void MMW_Init()
+void MMW_Init(MMW_FD_DATA_STRUCT MMW_FD_READ_STRUCT MMW_FD_WRITE_STRUCT)
 {
-	mb_r.start_addr = (uint16_t)-1U;
-	mb_r.real_addr = 0U;
-	mb_r.real_seq = SEQ_LU(0);
-	mb_r.cur_seq = SEQ_LU(0);
-	mb_r.buffer_invalid = true;
-	mb_r.read_buf[0] = 0;
-	mb_r.read_buf[1] = 0;
-	mb_r.read_buf[2] = 0;
-	mb_r.read_buf[3] = 0;
+	MMW_REF_READ_STRUCT.start_addr = (uint16_t)-1U;
+	MMW_REF_READ_STRUCT.real_addr = 0;
+	MMW_REF_READ_STRUCT.real_seq = SEQ_LU(MMW_REF_DATA_STRUCT, 0);
+	MMW_REF_READ_STRUCT.cur_seq = SEQ_LU(MMW_REF_DATA_STRUCT, 0);
+	MMW_REF_READ_STRUCT.buffer_invalid = true;
+	MMW_REF_READ_STRUCT.read_buf[0U] = 0;
+	MMW_REF_READ_STRUCT.read_buf[1U] = 0;
+	MMW_REF_READ_STRUCT.read_buf[2U] = 0;
+	MMW_REF_READ_STRUCT.read_buf[3U] = 0;
+
+	MMW_REF_WRITE_STRUCT.lastAddr = (uint16_t)-1U;
+	MMW_REF_WRITE_STRUCT.targetSeq = SEQ_LU(MMW_REF_DATA_STRUCT, 0);
+	MMW_REF_WRITE_STRUCT.la_inval = true;
+	MMW_REF_WRITE_STRUCT.buffer[0U] = 0;
+	MMW_REF_WRITE_STRUCT.buffer[1U] = 0;
+	MMW_REF_WRITE_STRUCT.buffer[2U] = 0;
+	MMW_REF_WRITE_STRUCT.buffer[3U] = 0;
 }
 
 /*
@@ -56,86 +66,97 @@ void MMW_Init()
  * buf - output
  * return: address within the output buffer to read for the specified address
  */
-uint8_t _mmw_read(uint16_t addr, const uint16_t **const buf)
+uint8_t _mmw_read(MMW_FD_DATA_STRUCT MMW_FD_READ_STRUCT 
+				  uint16_t addr, const uint16_t **const buf)
 {
 	/* Read structure mb_r initialized in init function */
 	/* checks the address and whether the buffer is correct */
-	mb_r.cur_seq = SEQ_LU(addr);
-	if (addr >= mb_r.start_addr && 
-		addr <= mb_r.start_addr + mb_r.real_seq && 
-		mb_r.cur_seq < mb_r.real_seq)
+	/* reading the first address of a real register again triggers a refresh */
+	MMW_REF_READ_STRUCT.cur_seq = SEQ_LU(MMW_REF_DATA_STRUCT, addr);
+	if (addr => MMW_REF_READ_STRUCT.start_addr && 
+		addr <= MMW_REF_READ_STRUCT.start_addr + MMW_REF_READ_STRUCT.real_seq && 
+		MMW_REF_READ_STRUCT.cur_seq <MMW_REF_READ_STRUCT.real_seq)
 	{
 		/* Pass.  The buffer is up-to-date.  */
 	}
 	else
 	{
 		/* Traverse through fake addresses until we find our real address */
-		mb_r.real_addr = 0;
-		mb_r.cur_seq = SEQ_LU(0);
-		mb_r.real_seq = SEQ_LU(0);
-		mb_r.start_addr = 0;
+		MMW_REF_READ_STRUCT.real_addr = 0;
+		MMW_REF_READ_STRUCT.cur_seq = SEQ_LU(MMW_REF_DATA_STRUCT, 0);
+		MMW_REF_READ_STRUCT.real_seq = SEQ_LU(MMW_REF_DATA_STRUCT, 0);
+		MMW_REF_READ_STRUCT.start_addr = 0;
 		for (uint16_t i = 0; i <= addr; i++)
 		{
-			uint8_t my_seq = SEQ_LU(i);
+			uint8_t my_seq = SEQ_LU(MMW_REF_DATA_STRUCT, i);
 			/* cross over real register boundary */
-			if (my_seq >= mb_r.cur_seq)
+			if (my_seq >= MMW_REF_READ_STRUCT.cur_seq)
 			{
-				mb_r.real_addr++;
-				mb_r.real_seq = my_seq;
-				mb_r.start_addr = i;
+				MMW_REF_READ_STRUCT.real_addr++;
+				MMW_REF_READ_STRUCT.real_seq = my_seq;
+				MMW_RED_READ_STRUCT.start_addr = i;
 			}
-			mb_r.cur_seq = my_seq;
+			MMW_REF_READ_STRUCT.cur_seq = my_seq;
 		}
 		/* For loop exit condition compensation */
-		mb_r.real_addr--;
-		mb_r.buffer_invalid = true;
+		MMW_REF_READ_STRUCT.real_addr--;
+		MMW_REF_READ_STRUCT.buffer_invalid = true;
 	}
 	/* 
 	 * The real mb register list actually contains pointers to registers
 	 * larger than uint16_t, so we use the correct cast for those registers
 	 * when extracting them into the read buffer.  
 	 */
-	if (mb_r.buffer_invalid)
+	if (MMW_REF_READ_STRUCT.buffer_invalid)
 	{
-		switch (mb_r.real_seq)
+		switch (MMW_REF_READ_STRUCT.real_seq)
 		{
 		case eMMREG_16B:
-			mb_r.read_buf[0] = *real_mb_reg[mb_r.real_addr];
+			MMW_REF_READ_STRUCT.read_buf[0] = *MMW_REF_DATA_STRUCT
+					.mb_reg[MMW_REF_READ_STRUCT.real_addr];
 			break;
 		case eMMREG_32B:
-			mb_r.read_buf[0] = *(uint32_t*)real_mb_reg[mb_r.real_addr];
-			mb_r.read_buf[1] = *(uint32_t*)real_mb_reg[mb_r.real_addr] >> 16U;
+			MMW_REF_READ_STRUCT.read_buf[0] = *(uint32_t*)MMW_REF_DATA_STRUCT
+					.mb_reg[MMW_REF_READ_STRUCT.real_addr];
+			MMW_REF_READ_STRUCT.read_buf[1] = *(uint32_t*)MMW_REF_DATA_STRUCT
+					.mb_reg[MMW_REF_READ_STRUCT.real_addr] >> 16U;
 			break;
 		case eMMREG_64B:
-			mb_r.read_buf[0] = *(uint64_t*)real_mb_reg[mb_r.real_addr];
-			mb_r.read_buf[1] = *(uint64_t*)real_mb_reg[mb_r.real_addr] >> 16U;
-			mb_r.read_buf[2] = *(uint64_t*)real_mb_reg[mb_r.real_addr] >> 32U;
-			mb_r.read_buf[3] = *(uint64_t*)real_mb_reg[mb_r.real_addr] >> 48U;
+			MMW_REF_READ_STRUCT.read_buf[0] = *(uint64_t*)MMW_REF_DATA_STRUCT
+					.mb_reg[MMW_REF_READ_STRUCT.real_addr];
+			MMW_REF_READ_STRUCT.read_buf[1] = *(uint64_t*)MMW_REF_DATA_STRUCT
+					.mb_reg[MMW_REF_READ_STRUCT.real_addr] >> 16U;
+			MMW_REF_READ_STRUCT.read_buf[2] = *(uint64_t*)MMW_REF_DATA_STRUCT
+					.mb_reg[MMW_REF_READ_STRUCT.real_addr] >> 32U;
+			MMW_REF_READ_STRUCT.read_buf[3] = *(uint64_t*)MMW_REF_DATA_STRUCT
+					.mb_reg[MMW_REF_READ_STRUCT.real_addr] >> 48U;
 			break;
 		default:
 			// error handling here
 			break;
 		}
-		mb_r.buffer_invalid = false;
+		MMW_REF_READ_STRUCT.buffer_invalid = false;
 	}
-	(*buf) = mb_r.read_buf;
-	return mb_r.cur_seq;
+	(*buf) = MMW_REF_READ_STRUCT.read_buf;
+	return MMW_REF_READ_STRUCT.cur_seq;
 }
 
-void _mmw_write(uint16_t addr, uint16_t buf[4])
+void _mmw_write(MMW_FD_DATA_STRUCT MMW_FD_WRITE_STRUCT 
+				uint16_t addr, uint16_t buf[4])
 {
+	/* This struct is here to allow a better bit-wise representation */
 	struct
 	{
 		uint16_t real_addr;
 		uint8_t real_seq: 2;
 		uint8_t last_seq: 2;
 		uint8_t my_seq: 2;
-	} work = {0, SEQ_LU(0), SEQ_LU(0), SEQ_LU(0)};
+	} work = {0, SEQ_LU(MMW_REF_DATA_STRUCT, 0), SEQ_LU(MMW_REF_DATA_STRUCT, 0), SEQ_LU(MMW_REF_DATA_STRUCT, 0)};
 	/* Traverse across the sequence list to find real addresses */
 	/* Note that this is calculated for each address including zero */
 	for (uint16_t i = 0; i <= addr; i++)
 	{
-		work.my_seq = SEQ_LU(i);
+		work.my_seq = SEQ_LU(MMW_REF_DATA_STRUCT, i);
 		/* cross over register boundary */
 		if (work.my_seq >= work.last_seq)
 		{
@@ -150,13 +171,13 @@ void _mmw_write(uint16_t addr, uint16_t buf[4])
 	switch (work.real_seq)
 	{
 	case eMMREG_16B:
-		*(real_mb_reg[work.real_addr]) = buf[0U];
+		*(MMW_REF_DATA_STRUCT.mb_reg[work.real_addr]) = buf[0U];
 		break;
 	case eMMREG_32B:
-		*(uint32_t*)(real_mb_reg[work.real_addr]) = (uint32_t)buf[0U] | (uint32_t)buf[1U] << 16U;
+		*(uint32_t*)(MMW_REF_DATA_STRUCT.mb_reg[work.real_addr]) = (uint32_t)buf[0U] | (uint32_t)buf[1U] << 16U;
 		break;
 	case eMMREG_64B:
-		*(uint64_t*)(real_mb_reg[work.real_addr]) = (uint64_t)buf[0U] | (uint64_t)buf[1U] << 16U | (uint64_t)buf[2U] << 32U | (uint64_t)buf[3U] << 48U;
+		*(uint64_t*)(MMW_REF_DATA_STRUCT.mb_reg[work.real_addr]) = (uint64_t)buf[0U] | (uint64_t)buf[1U] << 16U | (uint64_t)buf[2U] << 32U | (uint64_t)buf[3U] << 48U;
 		break;
 	default:
 		// error handling code here?
@@ -164,73 +185,80 @@ void _mmw_write(uint16_t addr, uint16_t buf[4])
 	}
 }
 
-void _mmw_start(uint16_t addr, uint16_t data)
+void _mmw_start(MMW_FD_DATA_STRUCT MMW_FD_WRITE_STRUCT 
+				uint16_t addr, uint16_t data)
 {
-	mb.targetSeq = SEQ_LU(addr);
-	mb.lastAddr = addr;
-	mb.la_inval = 0;
-	mb.buffer[mb.targetSeq] = data;
+	MMW_REF_WRITE_STRUCT.targetSeq = SEQ_LU(MMW_REF_DATA_STRUCT, addr);
+	MMW_REF_WRITE_STRUCT.lastAddr = addr;
+	MMW_REF_WRITE_STRUCT.la_inval = 0;
+	MMW_REF_WRITE_STRUCT.buffer[MMW_REF_WRITE_STRUCT.targetSeq] = data;
 }
 
-void _mmw_inval()
+void _mmw_inval(MMW_FD_WRITE_STRUCT)
 {
-	mb.targetSeq = 0;
-	mb.la_inval = 1;
+	MMW_REF_WRITE_STRUCT.targetSeq = 0;
+	MMW_REF_WRITE_STRUCT.la_inval = 1;
 }
 
-bool MMW_Write_Register(uint16_t addr, uint16_t data)
+bool MMW_Write_Register(MMW_FD_DATA_STRUCT MMW_FD_WRITE_STRUCT 
+						uint16_t addr, uint16_t data)
 {
 	// if address is 0, all writes are valid and checking is not needed
 	// does not account for an incorrectly programmed sequence (yet)
 	if (addr == 0)
 	{
 		// start of sequence and previous lower address able to be assumed
-		_mmw_start(addr, data);
-		if (mb.targetSeq == 0U)
+		_mmw_start(MMW_CALL_DATA_STRUCT MMW_CALL_WRITE_STRUCT addr, data);
+		if (MMW_REF_WRITE_STRUCT.targetSeq == 0U)
 		{
-			_mmw_write(addr, mb.buffer);
-			_mmw_inval();
+			_mmw_write(MMW_CALL_DATA_STRUCT MMW_CALL_WRITE_STRUCT addr,
+							MMW_REF_WRITE_STRUCT.buffer);
+			_mmw_inval(MMW_CALL_WRITE_STRUCT);
 		}
 	}
 	else
 	{
 		// previous sequence is 0, we are starting a new sequence
-		if (SEQ_LU(addr - 1U) == 0U)
+		if (SEQ_LU(MMW_REF_DATA_STRUCT, addr - 1U) == 0U)
 		{
-			_mmw_start(addr, data);
+			_mmw_start(MMW_CALL_DATA_STRUCT MMW_CALL_WRITE_STRUCT addr, data);
 		}
 		// if we are in the middle of a write set
-		else if (mb.la_inval == 0U && SEQ_LU(addr - 1U) == SEQ_LU(addr) + 1U
-				&& mb.lastAddr == addr - 1U)
+		else if (MMW_REF_WRITE_STRUCT.la_inval == 0U &&
+				SEQ_LU(MMW_REF_DATA_STRUCT, addr - 1U) == 
+				  SEQ_LU(MMW_REF_DATA_STRUCT, addr) + 1U && 
+				MMW_REF_WRITE_STRUCT.lastAddr == addr - 1U)
 		{
 			// continuing sequence
-			mb.lastAddr = addr;
-			mb.buffer[SEQ_LU(addr)] = data;
+			MMW_REF_WRITE_STRUCT.lastAddr = addr;
+			MMW_REF_WRITE_STRUCT.buffer[SEQ_LU(MMW_REF_DATA_STRUCT, addr)] 
+					= data;
 		}
 		else
 		{
 			// invalid write
 			// generally, the cases that end up here are trying to
 			// write in the middle of a register set
-			_mmw_inval(addr);
+			_mmw_inval(MMW_CALL_WRITE_STRUCT);
 			return 0;
 		}
 		// last write of sequence
-		if (SEQ_LU(addr) == 0U)
+		if (SEQ_LU(MMW_REF_DATA_STRUCT, addr) == 0U)
 		{
-			_mmw_write(addr, mb.buffer);
-			_mmw_inval();
+			_mmw_write(MMW_CALL_DATA_STRUCT MMW_CALL_WRITE_STRUCT addr, mb.buffer);
+			_mmw_inval(MMW_CALL_WRITE_STRUCT);
 		}
 	}
 	return 1U;
 }
 
-bool MMW_Read_Register(uint16_t addr, uint16_t *const data)
+bool MMW_Read_Register(MMW_FD_DATA_STRUCT MMW_FD_READ_STRUCT uint16_t addr, 
+				uint16_t *const data)
 {
 	const uint16_t *buf = NULL;
 	// mmw read finds the data at the last (biggest) address that is greater than or equal to
 	// the requested address
-	uint8_t offset = _mmw_read(addr, &buf);
+	uint8_t offset = _mmw_read(MMW_CALL_DATA_STRUCT MMW_CALL_READ_STRUCT addr, &buf);
 	*data = buf[offset];
 	return 1U;
 }
