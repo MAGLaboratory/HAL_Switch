@@ -27,8 +27,9 @@ static uint64_t reg_g;
 static uint16_t (*const real_mb_reg[]) =
 {&reg_a, &reg_b, &reg_c, &reg_d, (uint16_t*)&reg_e, (uint16_t*)&reg_f, (uint16_t*)&reg_g};
 
-#if MMW_STRUCT_TYPE == MMW_STRUCT_STATIC
-static T_MMW_Data mb_d = {seq, real_mb_reg};
+#if MMW_STRUCT_TYPE == MMW_STRUCT_INTERNAL
+static T_MMW_Data mb_d = {seq,
+		real_mb_reg};
 static T_MMW_Read mb_r;
 static T_MMW_Write mb_w;
 #endif /* MMW_STRUCT_TYPE == MMW_STRUCT_STATIC */
@@ -73,7 +74,7 @@ uint8_t _mmw_read(MMW_FD_DATA_STRUCT MMW_FD_READ_STRUCT
 	/* checks the address and whether the buffer is correct */
 	/* reading the first address of a real register again triggers a refresh */
 	MMW_REF_READ_STRUCT.cur_seq = SEQ_LU(MMW_REF_DATA_STRUCT, addr);
-	if (addr => MMW_REF_READ_STRUCT.start_addr && 
+	if (addr >= MMW_REF_READ_STRUCT.start_addr &&
 		addr <= MMW_REF_READ_STRUCT.start_addr + MMW_REF_READ_STRUCT.real_seq && 
 		MMW_REF_READ_STRUCT.cur_seq <MMW_REF_READ_STRUCT.real_seq)
 	{
@@ -94,7 +95,7 @@ uint8_t _mmw_read(MMW_FD_DATA_STRUCT MMW_FD_READ_STRUCT
 			{
 				MMW_REF_READ_STRUCT.real_addr++;
 				MMW_REF_READ_STRUCT.real_seq = my_seq;
-				MMW_RED_READ_STRUCT.start_addr = i;
+				MMW_REF_READ_STRUCT.start_addr = i;
 			}
 			MMW_REF_READ_STRUCT.cur_seq = my_seq;
 		}
@@ -245,7 +246,8 @@ bool MMW_Write_Register(MMW_FD_DATA_STRUCT MMW_FD_WRITE_STRUCT
 		// last write of sequence
 		if (SEQ_LU(MMW_REF_DATA_STRUCT, addr) == 0U)
 		{
-			_mmw_write(MMW_CALL_DATA_STRUCT MMW_CALL_WRITE_STRUCT addr, mb.buffer);
+			_mmw_write(MMW_CALL_DATA_STRUCT MMW_CALL_WRITE_STRUCT addr,
+					MMW_REF_WRITE_STRUCT.buffer);
 			_mmw_inval(MMW_CALL_WRITE_STRUCT);
 		}
 	}

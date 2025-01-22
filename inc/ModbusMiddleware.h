@@ -34,7 +34,7 @@ typedef struct
 typedef struct
 {
 	const uint8_t *const seq;
-	uint16_t (*const mb_reg[]);
+	uint16_t (*const *const mb_reg);
 } T_MMW_Data;
 
 typedef struct
@@ -55,15 +55,15 @@ typedef struct
 
 #if defined(MMW_STRUCT_TYPE)
 #if MMW_STRUCT_TYPE == MMW_STRUCT_INTERNAL
-#define MMW_FD_DATA_STRUCT ()
-#define MMW_FD_READ_STRUCT ()
-#define MMW_FD_WRITE_STRUCT ()
+#define MMW_FD_DATA_STRUCT
+#define MMW_FD_READ_STRUCT
+#define MMW_FD_WRITE_STRUCT
 #define MMW_REF_DATA_STRUCT (mb_d)
 #define MMW_REF_READ_STRUCT (mb_r)
 #define MMW_REF_WRITE_STRUCT (mb_w)
-#define MMW_CALL_DATA_STRUCT ()
-#define MMW_CALL_READ_STRUCT ()
-#define MMW_CALL_WRITE_STRUCT ()
+#define MMW_CALL_DATA_STRUCT
+#define MMW_CALL_READ_STRUCT
+#define MMW_CALL_WRITE_STRUCT
 #elif MMW_STRUCT_TYPE == MMW_STRUCT_EXTERNAL
 #define MMW_FD_DATA_STRUCT (T_MMW_Data *const md_st,)
 #define MMW_FD_READ_STRUCT (T_MMW_Read *const mr_st,)
