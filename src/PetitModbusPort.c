@@ -1,6 +1,7 @@
 #include "em_device.h"
 #include "PetitModbusPort.h"
 #include "PetitModbus.h"
+#include "ModbusMiddleware.h"
 
 void PetitPortTxBegin(pu8_t data)
 {
@@ -30,4 +31,14 @@ void PetitPortDirTx(void)
 void PetitPortDirRx(void)
 {
 	//GPIO->P[txen_PORT].DOUTCLR = 1u << txen_PIN;
+}
+
+bool PetitPortRegRead(uint16_t Addr, uint16_t *Data)
+{
+	return MMW_Read_Register(&MMW_CALL_DATA_STRUCT &MMW_CALL_READ_STRUCT Addr, Data);
+}
+
+bool PetitPortRegWrite(uint16_t Addr, uint16_t Data)
+{
+	return MMW_Write_Register(&MMW_CALL_DATA_STRUCT &MMW_CALL_WRITE_STRUCT Addr, Data);
 }

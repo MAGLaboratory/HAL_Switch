@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include "em_device.h"
 #include "em_usart.h"
+#include "ModbusMiddleWare.h"
 
 #define PETITMODBUS_SLAVE_ADDRESS                       ( 255 )
 
@@ -87,9 +88,6 @@
 
 extern void PetitPortDirTx(void);
 extern void PetitPortDirRx(void);
-
-#define PetitPortRegRead(a, b) MMW_Read_Register(a, b)
-#define PetitPortRegWrite(a, b) MMW_Write_Register(a, b)
 
 #endif /* INC_PETITMODBUSUSERPORT_H_ */
 

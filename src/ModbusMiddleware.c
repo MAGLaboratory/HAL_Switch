@@ -12,29 +12,16 @@
  * Reads retrieve the register and 
  */
 
-/* The sequence, registers, and register reference definitions */
-static const uint8_t seq[] =
-{
-	TO_SEQ(eMMREG_16B, eMMREG_16B, eMMREG_16B, eMMREG_16B),
-	TO_SEQ(eMMREG_32B, eMMREG_16B, eMMREG_32B, eMMREG_16B),
-	TO_SEQ(eMMREG_64B, eMMREG_A64B, eMMREG_32B, eMMREG_16B)
-};
-
-static uint16_t reg_a, reg_b, reg_c, reg_d;
-static uint32_t reg_e, reg_f;
-static uint64_t reg_g;
-
-static uint16_t (*const real_mb_reg[]) =
-{&reg_a, &reg_b, &reg_c, &reg_d, (uint16_t*)&reg_e, (uint16_t*)&reg_f, (uint16_t*)&reg_g};
-
 #if MMW_STRUCT_TYPE == MMW_STRUCT_INTERNAL
-static T_MMW_Data mb_d = {seq,
+extern const uint8_t seq[];
+extern uint16_t (*const real_mb_reg[]);
+static const T_MMW_Data mb_d = {seq,
 		real_mb_reg};
 static T_MMW_Read mb_r;
 static T_MMW_Write mb_w;
-#endif /* MMW_STRUCT_TYPE == MMW_STRUCT_STATIC */
+#endif /* MMW_STRUCT_TYPE == MMW_STRUCT_INTERNAL */
 
-void MMW_Init(MMW_FD_DATA_STRUCT MMW_FD_READ_STRUCT MMW_FD_WRITE_STRUCT)
+void MMW_Init(MMW_FD_DATA_STRUCT MMW_COMMA MMW_FD_READ_STRUCT MMW_COMMA MMW_FD_WRITE_STRUCT)
 {
 	MMW_REF_READ_STRUCT.start_addr = (uint16_t)-1U;
 	MMW_REF_READ_STRUCT.real_addr = 0;
@@ -67,7 +54,7 @@ void MMW_Init(MMW_FD_DATA_STRUCT MMW_FD_READ_STRUCT MMW_FD_WRITE_STRUCT)
  * buf - output
  * return: address within the output buffer to read for the specified address
  */
-uint8_t _mmw_read(MMW_FD_DATA_STRUCT MMW_FD_READ_STRUCT 
+uint8_t _mmw_read(MMW_FD_DATA_STRUCT MMW_COMMA MMW_FD_READ_STRUCT MMW_COMMA
 				  uint16_t addr, const uint16_t **const buf)
 {
 	/* Read structure mb_r initialized in init function */
@@ -142,7 +129,7 @@ uint8_t _mmw_read(MMW_FD_DATA_STRUCT MMW_FD_READ_STRUCT
 	return MMW_REF_READ_STRUCT.cur_seq;
 }
 
-void _mmw_write(MMW_FD_DATA_STRUCT MMW_FD_WRITE_STRUCT 
+void _mmw_write(MMW_FD_DATA_STRUCT MMW_COMMA
 				uint16_t addr, uint16_t buf[4])
 {
 	/* This struct is here to allow a better bit-wise representation */
@@ -186,7 +173,7 @@ void _mmw_write(MMW_FD_DATA_STRUCT MMW_FD_WRITE_STRUCT
 	}
 }
 
-void _mmw_start(MMW_FD_DATA_STRUCT MMW_FD_WRITE_STRUCT 
+void _mmw_start(MMW_FD_DATA_STRUCT MMW_COMMA MMW_FD_WRITE_STRUCT MMW_COMMA
 				uint16_t addr, uint16_t data)
 {
 	MMW_REF_WRITE_STRUCT.targetSeq = SEQ_LU(MMW_REF_DATA_STRUCT, addr);
@@ -201,7 +188,7 @@ void _mmw_inval(MMW_FD_WRITE_STRUCT)
 	MMW_REF_WRITE_STRUCT.la_inval = 1;
 }
 
-bool MMW_Write_Register(MMW_FD_DATA_STRUCT MMW_FD_WRITE_STRUCT 
+bool MMW_Write_Register(MMW_FD_DATA_STRUCT MMW_COMMA MMW_FD_WRITE_STRUCT MMW_COMMA
 						uint16_t addr, uint16_t data)
 {
 	// if address is 0, all writes are valid and checking is not needed
@@ -212,9 +199,8 @@ bool MMW_Write_Register(MMW_FD_DATA_STRUCT MMW_FD_WRITE_STRUCT
 		_mmw_start(MMW_CALL_DATA_STRUCT MMW_CALL_WRITE_STRUCT addr, data);
 		if (MMW_REF_WRITE_STRUCT.targetSeq == 0U)
 		{
-			_mmw_write(MMW_CALL_DATA_STRUCT MMW_CALL_WRITE_STRUCT addr,
-							MMW_REF_WRITE_STRUCT.buffer);
-			_mmw_inval(MMW_CALL_WRITE_STRUCT);
+			_mmw_write(MMW_CALL_DATA_STRUCT addr, MMW_REF_WRITE_STRUCT.buffer);
+			MMW_INVAL();
 		}
 	}
 	else
@@ -240,22 +226,21 @@ bool MMW_Write_Register(MMW_FD_DATA_STRUCT MMW_FD_WRITE_STRUCT
 			// invalid write
 			// generally, the cases that end up here are trying to
 			// write in the middle of a register set
-			_mmw_inval(MMW_CALL_WRITE_STRUCT);
+			MMW_INVAL();
 			return 0;
 		}
 		// last write of sequence
 		if (SEQ_LU(MMW_REF_DATA_STRUCT, addr) == 0U)
 		{
-			_mmw_write(MMW_CALL_DATA_STRUCT MMW_CALL_WRITE_STRUCT addr,
-					MMW_REF_WRITE_STRUCT.buffer);
-			_mmw_inval(MMW_CALL_WRITE_STRUCT);
+			_mmw_write(MMW_CALL_DATA_STRUCT addr, MMW_REF_WRITE_STRUCT.buffer);
+			MMW_INVAL();
 		}
 	}
 	return 1U;
 }
 
-bool MMW_Read_Register(MMW_FD_DATA_STRUCT MMW_FD_READ_STRUCT uint16_t addr, 
-				uint16_t *const data)
+bool MMW_Read_Register(MMW_FD_DATA_STRUCT MMW_COMMA MMW_FD_READ_STRUCT MMW_COMMA
+		uint16_t addr,  uint16_t *const data)
 {
 	const uint16_t *buf = NULL;
 	// mmw read finds the data at the last (biggest) address that is greater than or equal to

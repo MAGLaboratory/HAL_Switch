@@ -24,15 +24,6 @@ typedef enum
 
 typedef struct
 {
-	uint16_t lastAddr;
-	uint8_t targetSeq	:2;
-	uint8_t la_inval	:1;
-	uint16_t buffer[4];
-} T_MMW_Write;
-
-
-typedef struct
-{
 	const uint8_t *const seq;
 	uint16_t (*const *const mb_reg);
 } T_MMW_Data;
@@ -47,6 +38,14 @@ typedef struct
 	uint16_t read_buf[4];
 } T_MMW_Read;
 
+typedef struct
+{
+	uint16_t lastAddr;
+	uint8_t targetSeq	:2;
+	uint8_t la_inval	:1;
+	uint16_t buffer[4];
+} T_MMW_Write;
+
 /* Extracts the indexed 2-bit data out of seq (sequence LookUp) */
 /* finds the index within sequence and then shifts a mask to the target sequence */
 #define SEQ_LU(s, i) ((s.seq[(i) >> 2U]&(0b11U << (((i) & 0b11U) * 2U))) >> (((i) & 0b11U) * 2U))
@@ -55,6 +54,7 @@ typedef struct
 
 #if defined(MMW_STRUCT_TYPE)
 #if MMW_STRUCT_TYPE == MMW_STRUCT_INTERNAL
+#define MMW_COMMA
 #define MMW_FD_DATA_STRUCT
 #define MMW_FD_READ_STRUCT
 #define MMW_FD_WRITE_STRUCT
@@ -64,16 +64,22 @@ typedef struct
 #define MMW_CALL_DATA_STRUCT
 #define MMW_CALL_READ_STRUCT
 #define MMW_CALL_WRITE_STRUCT
+#define MMW_INVAL() _mmw_inval()
 #elif MMW_STRUCT_TYPE == MMW_STRUCT_EXTERNAL
-#define MMW_FD_DATA_STRUCT (T_MMW_Data *const md_st,)
-#define MMW_FD_READ_STRUCT (T_MMW_Read *const mr_st,)
-#define MMW_FD_WRITE_STRUCT (T_MMw_Write *const mw_st,)
+#define MMW_COMMA ,
+#define MMW_FD_DATA_STRUCT T_MMW_Data *const md_st
+#define MMW_FD_READ_STRUCT T_MMW_Read *const mr_st
+#define MMW_FD_WRITE_STRUCT T_MMW_Write *const mw_st
 #define MMW_REF_DATA_STRUCT (*md_st)
 #define MMW_REF_READ_STRUCT (*mr_st)
 #define MMW_REF_WRITE_STRUCT (*mw_st)
-#define MMW_CALL_DATA_STRUCT (md_st,)
-#define MMW_CALL_READ_STRUCT (mr_st,)
-#define MMW_CALL_WRITE_STRUCT (mw_st,)
+#define MMW_CALL_DATA_STRUCT md_st,
+#define MMW_CALL_READ_STRUCT mr_st,
+#define MMW_CALL_WRITE_STRUCT mw_st,
+#define MMW_INVAL() _mmw_inval(mw_st)
+extern T_MMW_Data md_st;
+extern T_MMW_Read mr_st;
+extern T_MMW_Write mw_st;
 #else
 #error "MMW_STRUCT_TYPE incorrectly defined"
 #endif /* MMW_STRUCT_TYPE */
@@ -81,8 +87,9 @@ typedef struct
 #error "MMW_STRUCT_TYPE not defined"
 #endif /* defined(MMW_STRUCT_TYPE) */
 
-void MMW_Init(MMW_FD_DATA_STRUCT MMW_FD_READ_STRUCT MMW_FD_WRITE_STRUCT);
-bool MMW_Write_Register(MMW_FD_DATA_STRUCT MMW_FD_WRITE_STRUCT uint16_t addr, uint16_t data);
-bool MMW_Read_Register(MMW_FD_DATA_STRUCT MMW_FD_READ_STRUCT uint16_t addr, uint16_t *const data);
+
+void MMW_Init(MMW_FD_DATA_STRUCT MMW_COMMA MMW_FD_READ_STRUCT MMW_COMMA MMW_FD_WRITE_STRUCT);
+bool MMW_Write_Register(MMW_FD_DATA_STRUCT MMW_COMMA MMW_FD_WRITE_STRUCT MMW_COMMA uint16_t addr, uint16_t data);
+bool MMW_Read_Register(MMW_FD_DATA_STRUCT MMW_COMMA MMW_FD_READ_STRUCT MMW_COMMA uint16_t addr, uint16_t *const data);
 
 #endif /* INC_MODBUSMIDDLEWARE_H_ */

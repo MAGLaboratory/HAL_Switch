@@ -18,6 +18,25 @@
  * Defines here
  *****************************************************************************/
 
+/* The sequence, registers, and register reference definitions */
+const uint8_t seq[] =
+{
+	TO_SEQ(eMMREG_16B, eMMREG_16B, eMMREG_16B, eMMREG_16B),
+	TO_SEQ(eMMREG_32B, eMMREG_16B, eMMREG_32B, eMMREG_16B),
+	TO_SEQ(eMMREG_64B, eMMREG_A64B, eMMREG_32B, eMMREG_16B)
+};
+
+uint16_t reg_a, reg_b, reg_c, reg_d;
+uint32_t reg_e, reg_f;
+uint64_t reg_g;
+
+uint16_t (*const real_mb_reg[]) =
+{&reg_a, &reg_b, &reg_c, &reg_d, (uint16_t*)&reg_e, (uint16_t*)&reg_f, (uint16_t*)&reg_g};
+
+T_MMW_Data md_st = {seq, real_mb_reg};
+T_MMW_Read mr_st;
+T_MMW_Write mw_st;
+
 const T_LED_BLINK LED_States[eLS_NUM_STATES][2] __attribute__((section(".text.consts")))=
 {
 	{{{0U, 0U, 0U}, 100U}, C_LED_ZERO_STATE}, // off
@@ -316,7 +335,7 @@ int main(void)
 	GPIO_Init();
 
 	/* modbus middleware init */
-	MMW_Init();
+	MMW_Init(&md_st, &mr_st, &mw_st);
 
 	PETIT_MODBUS_Init(&Petit);
 	Petit.Tx_Begin = PetitPortTxBegin;

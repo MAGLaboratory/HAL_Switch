@@ -15,6 +15,6 @@
  * MMW_STRUCT_EXTERNAL lets the user define structs and use multiple structs
  * MMW_STRUCT_INTERNAL defines the structs automatically  
  */
-#define MMW_STRUCT_TYPE MMW_STRUCT_INTERNAL
+#define MMW_STRUCT_TYPE MMW_STRUCT_EXTERNAL
 
 #endif /* INC_USERMODBUSMIDDLEWARE_H_ */
