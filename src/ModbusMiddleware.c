@@ -9,7 +9,12 @@
  * designators for modbus address to actual address.  The sequences always decrement unless on a boundary between an old register
  * and a new register.
  *
- * Reads retrieve the register and 
+ * Reads retrieve the fake modbus register based on a buffer-cached real
+ * register.  Reads from the first address of the fake register refresh
+ * the buffer from the real register.
+ *
+ * Writes write to a buffer until the real register's address space is filled
+ * and then write back to the real modbus register
  */
 
 #if MMW_STRUCT_TYPE == MMW_STRUCT_INTERNAL
@@ -23,23 +28,34 @@ static T_MMW_Write mb_w;
 
 void MMW_Init(MMW_FD_DATA_STRUCT MMW_COMMA MMW_FD_READ_STRUCT MMW_COMMA MMW_FD_WRITE_STRUCT)
 {
-	MMW_REF_READ_STRUCT.start_addr = (uint16_t)-1U;
-	MMW_REF_READ_STRUCT.real_addr = 0;
-	MMW_REF_READ_STRUCT.real_seq = SEQ_LU(MMW_REF_DATA_STRUCT, 0);
-	MMW_REF_READ_STRUCT.cur_seq = SEQ_LU(MMW_REF_DATA_STRUCT, 0);
-	MMW_REF_READ_STRUCT.buffer_invalid = true;
-	MMW_REF_READ_STRUCT.read_buf[0U] = 0;
-	MMW_REF_READ_STRUCT.read_buf[1U] = 0;
-	MMW_REF_READ_STRUCT.read_buf[2U] = 0;
-	MMW_REF_READ_STRUCT.read_buf[3U] = 0;
 
-	MMW_REF_WRITE_STRUCT.lastAddr = (uint16_t)-1U;
-	MMW_REF_WRITE_STRUCT.targetSeq = SEQ_LU(MMW_REF_DATA_STRUCT, 0);
-	MMW_REF_WRITE_STRUCT.la_inval = true;
-	MMW_REF_WRITE_STRUCT.buffer[0U] = 0;
-	MMW_REF_WRITE_STRUCT.buffer[1U] = 0;
-	MMW_REF_WRITE_STRUCT.buffer[2U] = 0;
-	MMW_REF_WRITE_STRUCT.buffer[3U] = 0;
+#if MMW_STRUCT_TYPE == MMW_STRUCT_EXTERNAL
+	if (MMW_CALL_READ_STRUCT != NULL)
+#endif
+	{
+		MMW_REF_READ_STRUCT.start_addr = (uint16_t)-1U;
+		MMW_REF_READ_STRUCT.real_addr = 0;
+		MMW_REF_READ_STRUCT.real_seq = SEQ_LU(MMW_REF_DATA_STRUCT, 0);
+		MMW_REF_READ_STRUCT.cur_seq = SEQ_LU(MMW_REF_DATA_STRUCT, 0);
+		MMW_REF_READ_STRUCT.buffer_invalid = true;
+		MMW_REF_READ_STRUCT.read_buf[0U] = 0;
+		MMW_REF_READ_STRUCT.read_buf[1U] = 0;
+		MMW_REF_READ_STRUCT.read_buf[2U] = 0;
+		MMW_REF_READ_STRUCT.read_buf[3U] = 0;
+	}
+
+#if MMW_STRUCT_TYPE == MMW_STRUCT_EXTERNAL
+	if (MMW_CALL_WRITE_STRUCT != NULL)
+#endif
+	{
+		MMW_REF_WRITE_STRUCT.lastAddr = (uint16_t)-1U;
+		MMW_REF_WRITE_STRUCT.targetSeq = SEQ_LU(MMW_REF_DATA_STRUCT, 0);
+		MMW_REF_WRITE_STRUCT.la_inval = true;
+		MMW_REF_WRITE_STRUCT.buffer[0U] = 0;
+		MMW_REF_WRITE_STRUCT.buffer[1U] = 0;
+		MMW_REF_WRITE_STRUCT.buffer[2U] = 0;
+		MMW_REF_WRITE_STRUCT.buffer[3U] = 0;
+	}
 }
 
 /*

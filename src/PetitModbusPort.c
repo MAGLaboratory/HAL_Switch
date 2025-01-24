@@ -42,3 +42,8 @@ bool PetitPortRegWrite(uint16_t Addr, uint16_t Data)
 {
 	return MMW_Write_Register(&MMW_CALL_DATA_STRUCT &MMW_CALL_WRITE_STRUCT Addr, Data);
 }
+
+bool PetitPortInputRegRead(uint16_t Addr, uint16_t *Data)
+{
+	return MMW_Read_Register(&hd_st, &hr_st, Addr, Data);	
+}

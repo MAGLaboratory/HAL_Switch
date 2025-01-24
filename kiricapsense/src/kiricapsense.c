@@ -35,7 +35,7 @@ static volatile uint8_t kcs_cbuf_sz[KCS_NUM_CHANNELS] = { 0 };
 static volatile uint8_t kcs_cbuf_sz_max[KCS_NUM_CHANNELS] = { 0 };
 #endif
 
-static uint16_t channelBaseline[KCS_NUM_CHANNELS] = { 0 };
+uint16_t kcs_channelBaseline[KCS_NUM_CHANNELS] = { 0 };
 static uint16_t baseMHDCount[KCS_NUM_CHANNELS] = { 0 };
 static uint16_t maxMHDCount[KCS_NUM_CHANNELS] = { 0 };
 
@@ -139,13 +139,13 @@ uint8_t _kcs_calcPressed(uint8_t channel)
 	   * volatile. */
 	  if (chanPress & (1 << channel))
 	  {
-		  threshold  = channelBaseline[channel] - KCS_THRESH_CLEAR;
+		  threshold  = kcs_channelBaseline[channel] - KCS_THRESH_CLEAR;
 	  }
 	  else
 	  {
-		  if (channelBaseline[channel] > KCS_THRESH_SET)
+		  if (kcs_channelBaseline[channel] > KCS_THRESH_SET)
 		  {
-			  threshold = channelBaseline[channel] - KCS_THRESH_SET;
+			  threshold = kcs_channelBaseline[channel] - KCS_THRESH_SET;
 		  }
 	  }
 
@@ -205,10 +205,10 @@ static void _kcs_baseline_calculation_algorithm (uint8_t chan)
 		uint16_t key = chanBuf2[chan][buf2Samples[chan]-1u];
 		// check direction for mismatch.
 		// the samples already in the buffer should all be the same direction
-		if ((key > channelBaseline[chan]
-				&& chanBuf2[chan][buf2Samples[chan]-2u] < channelBaseline[chan])
-				|| (key < channelBaseline[chan]
-				&& chanBuf2[chan][buf2Samples[chan]-2u] > channelBaseline[chan]))
+		if ((key > kcs_channelBaseline[chan]
+				&& chanBuf2[chan][buf2Samples[chan]-2u] < kcs_channelBaseline[chan])
+				|| (key < kcs_channelBaseline[chan]
+				&& chanBuf2[chan][buf2Samples[chan]-2u] > kcs_channelBaseline[chan]))
 		{
 			buf2Samples[chan] = 0;
 		}
@@ -221,7 +221,7 @@ static void _kcs_baseline_calculation_algorithm (uint8_t chan)
 		// MHD amplitude mismatch, case 1
 		// filtering for case 5 handled here
 		// first comparison for overflow prevention
-		if (channelBaseline[chan] > 2 * KCS_MHD && key < channelBaseline[chan] - 2 * KCS_MHD)
+		if (kcs_channelBaseline[chan] > 2 * KCS_MHD && key < kcs_channelBaseline[chan] - 2 * KCS_MHD)
 		{
 			if (baseMHDCount[chan] < KCS_RECAL_THR)
 			{
@@ -243,26 +243,26 @@ static void _kcs_baseline_calculation_algorithm (uint8_t chan)
 		newBase = chanBuf2[chan][KCS_BUF2_IDX_MID];
 		// called NHD in the application note, different here
 		// could be one line of ternary, but nobody likes ternary operations
-		if (newBase < channelBaseline[chan])
+		if (newBase < kcs_channelBaseline[chan])
 		{
-			if (KCS_SLR_D > 0 && newBase < channelBaseline[chan] - KCS_SLR_D && baseMHDCount[chan] < KCS_RECAL_THR)
+			if (KCS_SLR_D > 0 && newBase < kcs_channelBaseline[chan] - KCS_SLR_D && baseMHDCount[chan] < KCS_RECAL_THR)
 			{
-				channelBaseline[chan] -= KCS_SLR_D;
+				kcs_channelBaseline[chan] -= KCS_SLR_D;
 			}
 			else
 			{
-				channelBaseline[chan] = newBase;
+				kcs_channelBaseline[chan] = newBase;
 			}
 		}
-		else if (newBase > channelBaseline[chan])
+		else if (newBase > kcs_channelBaseline[chan])
 		{
-			if (KCS_SLR_U > 0 && newBase > channelBaseline[chan] + KCS_SLR_U)
+			if (KCS_SLR_U > 0 && newBase > kcs_channelBaseline[chan] + KCS_SLR_U)
 			{
-				channelBaseline[chan] += KCS_SLR_U;
+				kcs_channelBaseline[chan] += KCS_SLR_U;
 			}
 			else
 			{
-				channelBaseline[chan] = newBase;
+				kcs_channelBaseline[chan] = newBase;
 			}
 		}
 

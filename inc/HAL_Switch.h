@@ -10,4 +10,8 @@
 
 #define BIT_CHANGE(bit, vec, state) (vec = state ? vec | bit : vec & ~bit)
 
+extern T_MMW_Data md_st;
+extern T_MMW_Read mr_st;
+extern T_MMW_Write mw_st;
+
 #endif /* INC_HAL_SWITCH_H_ */

@@ -84,6 +84,7 @@ typedef struct
 	AOSM_State_t state;
 	AOSM_State_t lastState;
 	uint32_t counter;
+	uint32_t timeLeft;
 } T_AOSM_OUTPUT;
 
 #define C_AOSM_LONG_PRESS (1000UL)

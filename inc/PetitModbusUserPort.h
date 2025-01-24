@@ -24,7 +24,7 @@
 // Have to put a number of registers here
 // It has to be bigger than 0 (zero)!!
 #define NUMBER_OF_PETITREGISTERS                 		( 12 )
-#define NUMBER_OF_INPUT_PETITREGISTERS 					( 1 )
+#define NUMBER_OF_INPUT_PETITREGISTERS 					( 8 )
 
 #define NUMBER_OF_REGISTERS_IN_BUFFER                   ( 5 )
 
@@ -66,7 +66,7 @@
 
 #define PETIT_REG PETIT_EXTERNAL
 
-#define PETIT_INPUT_REG PETIT_INTERNAL
+#define PETIT_INPUT_REG PETIT_EXTERNAL
 /*****************************************************************************
  */
 // define this to let the CRC table reside in code memory rather than RAM

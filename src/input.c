@@ -113,15 +113,19 @@ bool AOSM(AOSM_Input_t *in, uint32_t msCounter,
 	switch (out->state)
 	{
 	case eAOSM_Off:
+		out->timeLeft = cfg->on_time;
 		onOff = false;
 		break;
 	case eAOSM_On:
+		out->timeLeft = cfg->on_time + out->counter - msCounter;
 		onOff = true;
 		break;
 	case eAOSM_aOff:
+		out->timeLeft = cfg->aoff_time + out->counter - msCounter;
 		onOff = true;
 		break;
 	case eAOSM_mOff:
+		out->timeLeft = cfg->moff_time + out->counter - msCounter;
 		onOff = true;
 		break;
 	}

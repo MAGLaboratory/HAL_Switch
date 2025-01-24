@@ -77,9 +77,6 @@ typedef struct
 #define MMW_CALL_READ_STRUCT mr_st,
 #define MMW_CALL_WRITE_STRUCT mw_st,
 #define MMW_INVAL() _mmw_inval(mw_st)
-extern T_MMW_Data md_st;
-extern T_MMW_Read mr_st;
-extern T_MMW_Write mw_st;
 #else
 #error "MMW_STRUCT_TYPE incorrectly defined"
 #endif /* MMW_STRUCT_TYPE */
@@ -88,7 +85,7 @@ extern T_MMW_Write mw_st;
 #endif /* defined(MMW_STRUCT_TYPE) */
 
 
-void MMW_Init(MMW_FD_DATA_STRUCT MMW_COMMA MMW_FD_READ_STRUCT MMW_COMMA MMW_FD_WRITE_STRUCT);
+void MMW_Init(MMW_FD_READ_STRUCT MMW_COMMA MMW_FD_WRITE_STRUCT);
 bool MMW_Write_Register(MMW_FD_DATA_STRUCT MMW_COMMA MMW_FD_WRITE_STRUCT MMW_COMMA uint16_t addr, uint16_t data);
 bool MMW_Read_Register(MMW_FD_DATA_STRUCT MMW_COMMA MMW_FD_READ_STRUCT MMW_COMMA uint16_t addr, uint16_t *const data);
 
