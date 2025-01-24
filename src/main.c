@@ -18,36 +18,6 @@
  * Defines here
  *****************************************************************************/
 
-/* The sequence, registers, and register reference definitions */
-const uint8_t seq[] =
-{
-	TO_SEQ(eMMREG_16B, eMMREG_16B, eMMREG_16B, eMMREG_16B),
-	TO_SEQ(eMMREG_32B, eMMREG_16B, eMMREG_32B, eMMREG_16B),
-	TO_SEQ(eMMREG_64B, eMMREG_A64B, eMMREG_32B, eMMREG_16B)
-};
-
-uint16_t reg_a, reg_b, reg_c, reg_d;
-uint32_t reg_e, reg_f;
-uint64_t reg_g;
-
-uint16_t (*const real_mb_reg[]) =
-{&reg_a, &reg_b, &reg_c, &reg_d, (uint16_t*)&reg_e, (uint16_t*)&reg_f, (uint16_t*)&reg_g};
-
-T_MMW_Data md_st = {seq, real_mb_reg};
-T_MMW_Read mr_st;
-T_MMW_Write mw_st;
-
-const uint8_t h_seq[] =
-{
-	TO_SEQ(eMMREG_32B, eMMREG_16B, eMMREG_32B, eMMREG_16B),
-	TO_SEQ(eMMREG_16B, eMMREG_16B, eMMREG_16B, eMMREG_16B)
-};
-
-uint16_t (*const real_hd_reg[]) =
-{&WS_AOSM[0].timeLeft, &WS_AOSM[1].timeLeft, &WS_AOSM[0].lastState, &WS_AOSM[1].lastState, kcs_channelBaseline[0], kcs_channelBaseline[1]};
-
-T_MMW_Data hd_st = {h_seq, real_hd_reg};
-T_MMW_Read hr_st;
 
 const T_LED_BLINK LED_States[eLS_NUM_STATES][2] __attribute__((section(".text.consts")))=
 {
@@ -223,6 +193,44 @@ const T_LED_BLINK (*pLED_Blink_States[2][4])[2] =
 {&LED_States[eLS_Off], &LED_States[eLS_aOn], &LED_States[eLS_aOff], &LED_States[eLS_On]}};
 
 T_BLINK_SEL_OUTPUT led_bs[2];
+
+/* The modbus sequence, registers, and register reference definitions */
+const uint8_t seq[] =
+{
+	TO_SEQ(eMMREG_16B, eMMREG_16B, eMMREG_16B, eMMREG_16B),
+	TO_SEQ(eMMREG_32B, eMMREG_16B, eMMREG_32B, eMMREG_16B),
+	TO_SEQ(eMMREG_64B, eMMREG_A64B, eMMREG_32B, eMMREG_16B)
+};
+
+uint16_t reg_a, reg_b, reg_c, reg_d;
+uint32_t reg_e, reg_f;
+uint64_t reg_g;
+
+uint16_t (*const real_mb_reg[]) =
+{&reg_a, &reg_b, &reg_c, &reg_d, (uint16_t*)&reg_e, (uint16_t*)&reg_f, (uint16_t*)&reg_g};
+
+T_MMW_Data md_st = {seq, real_mb_reg};
+T_MMW_Read mr_st;
+T_MMW_Write mw_st;
+
+const uint8_t h_seq[] =
+{
+	TO_SEQ(eMMREG_32B, eMMREG_16B, eMMREG_32B, eMMREG_16B),
+	TO_SEQ(eMMREG_16B, eMMREG_16B, eMMREG_16B, eMMREG_16B)
+};
+
+uint16_t (*const real_hd_reg[]) =
+{
+		(uint16_t*)&WS_AOSM[0].timeLeft,
+		(uint16_t*)&WS_AOSM[1].timeLeft,
+		(uint16_t*)&WS_AOSM[0].state,
+		(uint16_t*)&WS_AOSM[1].state,
+		&kcs_channelBaseline[0],
+		&kcs_channelBaseline[1]
+};
+
+T_MMW_Data hd_st = {h_seq, real_hd_reg};
+T_MMW_Read hr_st;
 
 T_PETIT_MODBUS Petit;
 

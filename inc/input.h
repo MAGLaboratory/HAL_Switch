@@ -81,8 +81,8 @@ typedef struct
 
 typedef struct
 {
-	AOSM_State_t state;
-	AOSM_State_t lastState;
+	uint8_t state;
+	uint8_t lastState;
 	uint32_t counter;
 	uint32_t timeLeft;
 } T_AOSM_OUTPUT;

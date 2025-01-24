@@ -13,6 +13,8 @@
 
 #include "../../inc/kiricapsenseconfig.h"
 
+extern uint16_t kcs_channelBaseline[KCS_NUM_CHANNELS];
+
 void KIRICAPSENSE_Init(void);
 void KIRICAPSENSE_process(void);
 void KIRICAPSENSE_IT (void);
@@ -20,5 +22,7 @@ void KIRICAPSENSE_IT (void);
 uint8_t KIRICAPSENSE_pressReady(void);
 
 bool KIRICAPSENSE_getPressed(uint8_t channel);
+
+uint16_t KIRICAPSENSE_getRaw(uint8_t channel);
 
 #endif /* KIRICAPSENSE_INC_KIRICAPSENSE_H_ */

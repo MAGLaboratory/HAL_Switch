@@ -2,6 +2,7 @@
 #include "PetitModbusPort.h"
 #include "PetitModbus.h"
 #include "ModbusMiddleware.h"
+#include "HAL_Switch.h"
 
 void PetitPortTxBegin(pu8_t data)
 {
