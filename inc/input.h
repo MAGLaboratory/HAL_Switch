@@ -82,7 +82,7 @@ typedef struct
 typedef struct
 {
 	uint8_t state;
-	uint8_t lastState;
+	uint8_t chgAtState;
 	uint32_t counter;
 	uint32_t timeLeft;
 } T_AOSM_OUTPUT;
@@ -110,7 +110,7 @@ typedef enum
 
 typedef struct
 {
-	ADSM_State_t state;
+	uint16_t state;
 	uint32_t counter;
 } T_ADSM_OUTPUT;
 

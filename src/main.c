@@ -185,8 +185,8 @@ T_ADSM_CFG CF_ADSM[eADSM_CFG_S_NUM] =
 T_ADSM_CFG *pCF_ADSM[2] = {&CF_ADSM[0], &CF_ADSM[0]};
 T_ADSM_OUTPUT WS_ADSM[2];
 
-T_CONTROL_STATE WS_Control[2];
-T_CONTROL_STATE last_WS_Control[2];
+uint16_t WS_Control[2];
+uint16_t last_WS_Control[2];
 
 const T_LED_BLINK (*pLED_Blink_States[2][4])[2] =
 {{&LED_States[eLS_Off], &LED_States[eLS_aOn], &LED_States[eLS_aOff], &LED_States[eLS_On]},
@@ -358,13 +358,13 @@ void HAL_SWITCH_Process()
 				{
 					WS_AOSM[i].counter = msCounter;
 					WS_AOSM[i].state = eAOSM_On;
-					WS_AOSM[i].lastState = eAOSM_Off;
+					WS_AOSM[i].chgAtState = eAOSM_Off;
 				}
 				else
 				{
 					WS_AOSM[i].counter = msCounter;
 					WS_AOSM[i].state = eAOSM_Off;
-					WS_AOSM[i].lastState = eAOSM_Off;
+					WS_AOSM[i].chgAtState = eAOSM_Off;
 				}
 			}
 			// last control mode was commanded
@@ -374,13 +374,13 @@ void HAL_SWITCH_Process()
 				{
 					WS_AOSM[i].counter = msCounter;
 					WS_AOSM[i].state = eAOSM_On;
-					WS_AOSM[i].lastState = eAOSM_On;
+					WS_AOSM[i].chgAtState = eAOSM_On;
 				}
 				else
 				{
 					WS_AOSM[i].counter = msCounter;
 					WS_AOSM[i].state = eAOSM_Off;
-					WS_AOSM[i].lastState = eAOSM_Off;
+					WS_AOSM[i].chgAtState = eAOSM_Off;
 				}
 			}
 			break;

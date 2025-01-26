@@ -37,7 +37,7 @@ bool AOSM(AOSM_Input_t *in, uint32_t msCounter,
 
 	if (CAP_RISING_EDGE(in->num, in->capVec))
 	{
-		out->lastState = out->state;
+		out->chgAtState = out->state;
 	}
 
 	switch (out->state)
@@ -55,7 +55,7 @@ bool AOSM(AOSM_Input_t *in, uint32_t msCounter,
 			out->state = eAOSM_aOff;
 			out->counter = msCounter;
 		}
-		if (CAP_FALLING_EDGE(in->num, in->capVec) && out->lastState != eAOSM_Off)
+		if (CAP_FALLING_EDGE(in->num, in->capVec) && out->chgAtState != eAOSM_Off)
 		{
 			if (REL_NUM2VEC_OUTPUT(in->num, in->relayVec) != 0)
 			{
