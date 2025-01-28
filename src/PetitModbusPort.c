@@ -48,3 +48,48 @@ bool PetitPortInputRegRead(uint16_t Addr, uint16_t *Data)
 {
 	return MMW_Read_Register(&hd_st, &hr_st, Addr, Data);	
 }
+
+bool PetitPortDiscreteRead(uint16_t Addr, uint8_t *octet)
+{
+	if (Addr < 2)
+	{
+		*octet = capVec & CAP_IDX2VEC_STATUS(Addr);
+	}
+	else if (Addr < 4U)
+	{
+		*octet = commVec & COMM_IDX2VEC_STATE(Addr - 2U);
+	}
+	else if (Addr < 6U)
+	{
+		*octet = commVec & COMM_IDX2VEC_RX(Addr - 4U);
+	}
+	else
+	{
+		return false;
+	}
+	return true;
+}
+
+bool PetitPortCoilRead(uint16_t Addr, uint8_t *octet)
+{
+	if (Addr < 2U)
+	{
+		*octet = commVec & COMM_IDX2VEC_CMD(Addr);
+	}
+	else
+	{
+		return false;
+	}
+	return true;
+}
+
+bool PetitPortCoilWrite(uint16_t Addr, uint8_t octet)
+{
+	if (Addr < 2U)
+	{
+		BIT_CHANGE(commVec, COMM_IDX2VEC_CMD(Addr), octet);
+		BIT_CHANGE(commVec, COMM_IDX2VEC_RX(Addr), true);
+		return true;
+	}
+	return false;
+}

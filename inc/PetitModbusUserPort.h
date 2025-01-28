@@ -18,8 +18,8 @@
 
 #define PETITMODBUS_DLY_TOP  							( 0UL )
 
-#define NUMBER_OF_PETITCOILS                            ( 1 )
-#define NUMBER_OF_PETITDISCRETES                        ( 1 )
+#define NUMBER_OF_PETITCOILS                            ( 2 )
+#define NUMBER_OF_PETITDISCRETES                        ( 6 )
 // Petit Modbus RTU Slave Output Register Number
 // Have to put a number of registers here
 // It has to be bigger than 0 (zero)!!
@@ -61,9 +61,9 @@
 //     it is possible to use hardware CRC calculation with this.
 #define C_PETIT_CRC PETIT_CRC_TABULAR
 
-#define PETIT_COIL PETIT_INTERNAL
+#define PETIT_COIL PETIT_EXTERNAL
 
-#define PETIT_DISCRETE PETIT_INTERNAL
+#define PETIT_DISCRETE PETIT_EXTERNAL
 
 #define PETIT_REG PETIT_EXTERNAL
 
