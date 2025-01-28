@@ -19,7 +19,7 @@
 #define PETITMODBUS_DLY_TOP  							( 0UL )
 
 #define NUMBER_OF_PETITCOILS                            ( 1 )
-#define NUMBER_OF_DISCRETE_PETITINPUTS                  ( 0 )
+#define NUMBER_OF_PETITDISCRETES                        ( 1 )
 // Petit Modbus RTU Slave Output Register Number
 // Have to put a number of registers here
 // It has to be bigger than 0 (zero)!!
@@ -29,6 +29,7 @@
 #define NUMBER_OF_REGISTERS_IN_BUFFER                   ( 5 )
 
 #define PETITMODBUS_READ_COILS_ENABLED                  ( 1 )
+#define PETITMODBUS_READ_DISCRETES_ENABLED				( 1 )
 #define PETITMODBUS_READ_HOLDING_REGISTERS_ENABLED      ( 1 )
 #define PETITMODBUS_WRITE_SINGLE_COIL_ENABLED           ( 1 )
 #define PETITMODBUS_WRITE_SINGLE_REGISTER_ENABLED       ( 1 )
@@ -62,7 +63,7 @@
 
 #define PETIT_COIL PETIT_INTERNAL
 
-#define PETIT_DISCRETE_INPUT PETIT_INTERNAL
+#define PETIT_DISCRETE PETIT_INTERNAL
 
 #define PETIT_REG PETIT_EXTERNAL
 
