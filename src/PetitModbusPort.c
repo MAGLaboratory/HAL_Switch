@@ -61,7 +61,7 @@ bool PetitPortDiscreteRead(uint16_t Addr, uint8_t *octet)
 	}
 	else if (Addr < 6U)
 	{
-		*octet = commVec & COMM_IDX2VEC_RX(Addr - 4U);
+		*octet = commVec & COMM_IDX2VEC_CSM(Addr - 4U);
 	}
 	else
 	{
