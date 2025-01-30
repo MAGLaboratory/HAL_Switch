@@ -142,4 +142,8 @@ typedef enum
 	eCON_CMD_LIT
 } T_CONTROL_STATE;
 
+
+extern uint8_t capVec;
+extern uint8_t commVec;
+
 #endif /* INC_INPUT_H_ */

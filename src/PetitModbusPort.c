@@ -3,6 +3,7 @@
 #include "PetitModbus.h"
 #include "ModbusMiddleware.h"
 #include "HAL_Switch.h"
+#include "input.h"
 
 void PetitPortTxBegin(pu8_t data)
 {
@@ -87,8 +88,8 @@ bool PetitPortCoilWrite(uint16_t Addr, uint8_t octet)
 {
 	if (Addr < 2U)
 	{
-		BIT_CHANGE(commVec, COMM_IDX2VEC_CMD(Addr), octet);
-		BIT_CHANGE(commVec, COMM_IDX2VEC_RX(Addr), true);
+		BIT_CHANGE(COMM_IDX2VEC_CMD(Addr), commVec, octet);
+		BIT_CHANGE(COMM_IDX2VEC_RX(Addr), commVec, true);
 		return true;
 	}
 	return false;
