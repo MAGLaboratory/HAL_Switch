@@ -21,13 +21,13 @@
 #define KCS_CBUF_BITS			2			  /**< Number of bits in the circular buffer; must be at least 1 and no more than 8 */
 
 #define KCS_BUF0_SZ             3u
-#define KCS_BUF1_SZ             3u             /**< Also called NHD in a certain application note */
+#define KCS_BUF1_SZ             3u            /**< Also called NHD in a certain application note */
 #define KCS_BUF2_SZ				3u
 
 #define KCS_MHD                 20u
 #define KCS_RECAL_THR			1000u
 #define KCS_SLR_U				0u			  /**< Both slew rates operate at call speed / channel number / KCS_BUF0_SZ / KCS_BUF1_SZ / KCS_BUF2_SZ */
-#define KCS_SLR_D				20u
+#define KCS_SLR_D				10u
 
 #define KCS_THRESH_SET			100U
 #define KCS_THRESH_CLEAR		50U

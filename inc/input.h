@@ -26,6 +26,18 @@
 #define CAP_FALLING_EDGE(num, vec) (CAP_NUM2VEC_STATUS(num, vec) == 0\
 			&& CAP_NUM2VEC_HOLDOFF(num, vec) != 0)
 
+/*
+ * Communication vector
+ * There are two channels.  Each channel has a nibble.
+ * This comment describes the purpose of each bit.
+ *  * 0 - the state bit: the input to the debounce state machine directly
+ *      from modbus
+ *  * 1 - the RX bit: set when data is received
+ *  * 2 - the CSM bit: the state of the communication state machine
+ *  * 3 - the CMD bit: the on/off command sent to the shutdown startup state
+ *      machine
+ */
+
 #define COMM_INVEC_WIDTH (CAP_INVEC_WIDTH)
 #define COMM_IDX2VEC_STATE_SHIFT(idx) (idx*COMM_INVEC_WIDTH)
 #define COMM_IDX2VEC_STATE(idx) (1U << COMM_IDX2VEC_STATE_SHIFT(idx))
