@@ -9,6 +9,16 @@ typedef enum
 	eHR_KCS_threshHi,
 	eHR_KCS_threshLo,
 	eHR_NewPass,
-	eHR_MB_Ctrl
+	eHR_Conf_Ctrl
 } T_HoldingRegisters;
+
+typedef enum
+{
+	eCFG_Idle = 0,
+	eCFG_Load,
+	eCFG_Cache,
+	eCFG_Commit,
+	eCFG_Erase,
+	eCFG_Write
+} T_Conf_Ctrl;
 
